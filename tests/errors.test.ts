@@ -1,9 +1,9 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
   AppError,
-  RiotApiError,
-  RateLimitError,
   DatabaseError,
+  RateLimitError,
+  RiotApiError,
   ValidationError,
 } from "../src/utils/errors.ts";
 

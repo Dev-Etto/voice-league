@@ -1,8 +1,8 @@
 import { Database } from "bun:sqlite";
-import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
-import { players, type Player } from "./schema.ts";
+import { drizzle } from "drizzle-orm/bun-sqlite";
 import { DatabaseError } from "../utils/errors.ts";
+import { players, type Player } from "./schema.ts";
 
 const sqlite = new Database("VoiceLeague.sqlite");
 export const db = drizzle(sqlite);
