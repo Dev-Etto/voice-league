@@ -57,13 +57,11 @@ export class WatchdogEngine {
     for (const player of playersList) {
       if (this.checkedPuuids.has(player.puuid)) continue;
 
-      // Otimização por Presence: Só verifica se o usuário estiver "Jogando LoL" no Discord
       const member = await guild.members.fetch(player.discordId).catch(() => null);
       const isPlayingLoL = member?.presence?.activities.some(
         act => act.name.toLowerCase().includes("league of legends")
       );
 
-      // Se não estiver jogando LoL E não tiver uma partida ativa registrada, pulamos
       if (!isPlayingLoL && !player.lastGameId) {
         continue;
       }
@@ -105,13 +103,12 @@ export class WatchdogEngine {
       return;
     }
 
-    // Otimização: Marcar todos os outros jogadores registrados que estão nesta mesma partida
     const participantPuuids = new Set(game.participants.map(p => p.puuid));
     for (const p of allPlayers) {
       if (participantPuuids.has(p.puuid)) {
         this.checkedPuuids.add(p.puuid);
         if (p.puuid !== player.puuid) {
-           updateLastGameId(p.puuid, String(game.gameId));
+          updateLastGameId(p.puuid, String(game.gameId));
         }
       }
     }
