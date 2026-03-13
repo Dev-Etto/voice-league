@@ -1,8 +1,17 @@
 import { Database } from "bun:sqlite";
+import { DatabaseError } from "../utils/errors.ts";
 
 const db = new Database("VoiceLeague.sqlite");
 
-// Inicialização das tabelas
+interface PlayerRow {
+  discord_id: string;
+  puuid: string;
+  game_name: string;
+  tag_line: string;
+  last_game_id: string | null;
+  is_active: number;
+}
+
 const initDb = () => {
   try {
     db.run(`
@@ -18,9 +27,33 @@ const initDb = () => {
       )
     `);
   } catch (error) {
-    console.error("Erro ao inicializar banco de dados:", error);
-    throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DatabaseError(message);
   }
 };
 
-export { db, initDb };
+const getActivePlayers = (): PlayerRow[] => {
+  try {
+    return db.query<PlayerRow, []>(
+      "SELECT * FROM players WHERE is_active = 1"
+    ).all();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DatabaseError(message);
+  }
+};
+
+const updateLastGameId = (puuid: string, gameId: string | null): void => {
+  try {
+    db.run(
+      "UPDATE players SET last_game_id = ? WHERE puuid = ?",
+      [gameId, puuid]
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DatabaseError(message);
+  }
+};
+
+export { db, initDb, getActivePlayers, updateLastGameId };
+export type { PlayerRow };
