@@ -1,0 +1,20 @@
+# Dependencies
+node_modules
+.bun
+
+# Databases
+*.sqlite
+*.sqlite-journal
+
+# Environment
+.env
+.env.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
