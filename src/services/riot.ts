@@ -18,7 +18,7 @@ const SpectatorSchema = z.object({
     z.object({
       puuid: z.string(),
       teamId: z.number(),
-      summonerId: z.string(),
+      summonerId: z.string().optional(),
     })
   ),
 });
