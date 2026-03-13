@@ -43,11 +43,30 @@ export class WatchdogEngine {
     const playersList = getActivePlayers();
     if (playersList.length === 0) return;
 
-    console.log(`🔍 Verificando ${playersList.length} jogador(es)...`);
+    const guildId = getEnv().GUILD_ID;
+    const guild = await this.voiceManager.client.guilds.fetch(guildId).catch(() => null);
+    
+    if (!guild) {
+      console.error("❌ Guild não encontrada. Verifique o GUILD_ID no .env");
+      return;
+    }
+
+    console.log(`🔍 Verificando players ativos...`);
     this.checkedPuuids.clear();
 
     for (const player of playersList) {
       if (this.checkedPuuids.has(player.puuid)) continue;
+
+      // Otimização por Presence: Só verifica se o usuário estiver "Jogando LoL" no Discord
+      const member = await guild.members.fetch(player.discordId).catch(() => null);
+      const isPlayingLoL = member?.presence?.activities.some(
+        act => act.name.toLowerCase().includes("league of legends")
+      );
+
+      // Se não estiver jogando LoL E não tiver uma partida ativa registrada, pulamos
+      if (!isPlayingLoL && !player.lastGameId) {
+        continue;
+      }
 
       try {
         await this.checkPlayer(player, playersList);

@@ -24,7 +24,7 @@ interface ManagedChannel {
 }
 
 export class VoiceChannelManager {
-  private readonly client: Client;
+  public readonly client: Client;
   private readonly managedChannels = new Map<string, ManagedChannel>();
 
   constructor(client: Client) {

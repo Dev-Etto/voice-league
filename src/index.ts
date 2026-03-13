@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, REST, Routes, Events, type ChatInputCommandInteraction } from "discord.js";
+import { Client, Events, GatewayIntentBits, REST, Routes, type ChatInputCommandInteraction } from "discord.js";
 import { config } from "dotenv";
 import { registerCommand } from "./commands/register.ts";
 import { statusCommand } from "./commands/status.ts";
@@ -18,6 +18,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildPresences,
   ],
 });
 
