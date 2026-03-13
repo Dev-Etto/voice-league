@@ -1,6 +1,8 @@
-import { Client, GatewayIntentBits, REST, Routes } from "discord.js";
+import { Client, GatewayIntentBits, REST, Routes, type ChatInputCommandInteraction } from "discord.js";
 import { config } from "dotenv";
 import { registerCommand } from "./commands/register.ts";
+import { statusCommand } from "./commands/status.ts";
+import { unregisterCommand } from "./commands/unregister.ts";
 import { initDb } from "./database/db.ts";
 import { WatchdogEngine } from "./engine/watchdog.ts";
 import { loadEnv } from "./utils/env.ts";
@@ -21,7 +23,18 @@ const client = new Client({
   ],
 });
 
-const commands = [registerCommand.data.toJSON()];
+const commandHandlers: Record<string, { execute: (i: ChatInputCommandInteraction) => Promise<unknown> }> = {
+  register: registerCommand,
+  unregister: unregisterCommand,
+  status: statusCommand,
+};
+
+const commands = [
+  registerCommand.data.toJSON(),
+  unregisterCommand.data.toJSON(),
+  statusCommand.data.toJSON(),
+];
+
 const rest = new REST({ version: "10" }).setToken(env.DISCORD_TOKEN);
 
 async function deployCommands() {
@@ -50,8 +63,9 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   try {
-    if (interaction.commandName === "register") {
-      await registerCommand.execute(interaction);
+    const handler = commandHandlers[interaction.commandName];
+    if (handler) {
+      await handler.execute(interaction);
     }
   } catch (error) {
     console.error(`Erro no comando /${interaction.commandName}:`, error);

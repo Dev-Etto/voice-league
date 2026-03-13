@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts"
+    "start": "bun src/index.ts",
+    "test": "bun test"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
