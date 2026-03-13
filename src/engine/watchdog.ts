@@ -3,7 +3,7 @@ import { getActivePlayers, updateLastGameId, type Player } from "../database/db.
 import { getActiveGameByPuuid, type ActiveGame } from "../services/riot.ts";
 import { VoiceChannelManager } from "../services/voice-channel.ts";
 import { getEnv } from "../utils/env.ts";
-import { RateLimitError } from "../utils/errors.ts";
+import { RateLimitError, RiotApiError } from "../utils/errors.ts";
 
 interface TrackedGame {
   gameId: number;
@@ -15,6 +15,7 @@ export class WatchdogEngine {
   private readonly voiceManager: VoiceChannelManager;
   private readonly pollingIntervalMs: number;
   private readonly activeGames = new Map<number, TrackedGame>();
+  private readonly checkedPuuids = new Set<string>();
   private intervalId: ReturnType<typeof setInterval> | null = null;
 
   constructor(client: Client) {
@@ -43,16 +44,26 @@ export class WatchdogEngine {
     if (playersList.length === 0) return;
 
     console.log(`🔍 Verificando ${playersList.length} jogador(es)...`);
+    this.checkedPuuids.clear();
 
     for (const player of playersList) {
+      if (this.checkedPuuids.has(player.puuid)) continue;
+
       try {
-        await this.checkPlayer(player);
+        await this.checkPlayer(player, playersList);
       } catch (error) {
         if (error instanceof RateLimitError) {
           console.warn(`⏳ Rate limit atingido. Pausando poll por ${error.retryAfterSeconds}s.`);
           await this.sleep(error.retryAfterSeconds * 1000);
           return;
         }
+        
+        if (error instanceof RiotApiError && error.riotStatusCode === 401) {
+          console.error(`🛑 ERRO CRÍTICO: ${error.message}`);
+          this.stop();
+          return;
+        }
+
         console.error(`Erro ao verificar jogador ${player.gameName}:`, error);
       }
 
@@ -62,8 +73,9 @@ export class WatchdogEngine {
     await this.cleanupFinishedGames(playersList);
   }
 
-  private async checkPlayer(player: Player): Promise<void> {
+  private async checkPlayer(player: Player, allPlayers: Player[]): Promise<void> {
     const game = await getActiveGameByPuuid(player.puuid);
+    this.checkedPuuids.add(player.puuid);
 
     if (!game) {
       if (player.lastGameId) {
@@ -72,6 +84,17 @@ export class WatchdogEngine {
         await this.voiceManager.scheduleChannelDeletion(previousGameId);
       }
       return;
+    }
+
+    // Otimização: Marcar todos os outros jogadores registrados que estão nesta mesma partida
+    const participantPuuids = new Set(game.participants.map(p => p.puuid));
+    for (const p of allPlayers) {
+      if (participantPuuids.has(p.puuid)) {
+        this.checkedPuuids.add(p.puuid);
+        if (p.puuid !== player.puuid) {
+           updateLastGameId(p.puuid, String(game.gameId));
+        }
+      }
     }
 
     const isAlreadyTracked = this.activeGames.has(game.gameId);

@@ -44,6 +44,12 @@ async function request<T>(url: string, schema: z.ZodSchema<T>): Promise<T | null
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new RiotApiError(
+        "A Chave da API da Riot (RIOT_API_KEY) expirou ou é inválida. Gere uma nova em developer.riotgames.com",
+        401
+      );
+    }
     throw new RiotApiError(
       `Riot API respondeu com status ${response.status}`,
       response.status

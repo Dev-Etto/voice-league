@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { DatabaseError } from "../utils/errors.ts";
 import { players, type Player } from "./schema.ts";
+export type { Player };
 
 const sqlite = new Database("VoiceLeague.sqlite");
 export const db = drizzle(sqlite);
@@ -72,12 +73,11 @@ export const updateLastGameId = (puuid: string, gameId: string | null): void => 
   }
 };
 
-export const deletePlayersByDiscordId = (discordId: string): number => {
+export const deletePlayersByDiscordId = (discordId: string): void => {
   try {
-    const result = db.delete(players)
+    db.delete(players)
       .where(eq(players.discordId, discordId))
       .run();
-    return result.changes;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new DatabaseError(message);

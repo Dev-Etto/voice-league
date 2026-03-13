@@ -10,15 +10,9 @@ export const unregisterCommand = {
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      const deletedCount = deletePlayersByDiscordId(interaction.user.id);
+      deletePlayersByDiscordId(interaction.user.id);
 
-      if (deletedCount === 0) {
-        return interaction.editReply("⚠️ Você não possui nenhuma conta vinculada.");
-      }
-
-      return interaction.editReply(
-        `✅ ${deletedCount} conta(s) desvinculada(s) com sucesso.`
-      );
+      return interaction.editReply("✅ Todas as suas contas vinculadas foram removidas.");
     } catch (error) {
       console.error("Erro no comando /unregister:", error);
       return interaction.editReply("❌ Ocorreu um erro ao desvincular sua conta.");

@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, REST, Routes, type ChatInputCommandInteraction } from "discord.js";
+import { Client, GatewayIntentBits, REST, Routes, Events, type ChatInputCommandInteraction } from "discord.js";
 import { config } from "dotenv";
 import { registerCommand } from "./commands/register.ts";
 import { statusCommand } from "./commands/status.ts";
@@ -18,8 +18,6 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
   ],
 });
 
@@ -50,16 +48,16 @@ async function deployCommands() {
   }
 }
 
-client.once("ready", () => {
-  console.log(`🛡️ VoiceLeague online como ${client.user?.tag}`);
+client.once(Events.ClientReady, (readyClient) => {
+  console.log(`🛡️ VoiceLeague online como ${readyClient.user.tag}`);
   initDb();
   deployCommands();
 
-  const watchdog = new WatchdogEngine(client);
+  const watchdog = new WatchdogEngine(readyClient);
   watchdog.start();
 });
 
-client.on("interactionCreate", async (interaction) => {
+client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   try {
@@ -70,11 +68,16 @@ client.on("interactionCreate", async (interaction) => {
   } catch (error) {
     console.error(`Erro no comando /${interaction.commandName}:`, error);
 
-    const reply = interaction.deferred || interaction.replied
-      ? interaction.editReply("❌ Ocorreu um erro inesperado.")
-      : interaction.reply({ content: "❌ Ocorreu um erro inesperado.", ephemeral: true });
-
-    await reply.catch(console.error);
+    const errorPayload = { 
+      content: "❌ Ocorreu um erro inesperado.", 
+      ephemeral: true 
+    };
+    
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(errorPayload).catch(console.error);
+    } else {
+      await interaction.reply(errorPayload).catch(console.error);
+    }
   }
 });
 
