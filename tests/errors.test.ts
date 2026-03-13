@@ -3,7 +3,6 @@ import {
   AppError,
   RiotApiError,
   RateLimitError,
-  AccountNotFoundError,
   DatabaseError,
   ValidationError,
 } from "../src/utils/errors.ts";
@@ -29,12 +28,6 @@ describe("Error Hierarchy", () => {
     expect(error).toBeInstanceOf(RiotApiError);
     expect(error.retryAfterSeconds).toBe(120);
     expect(error.statusCode).toBe(429);
-  });
-
-  it("AccountNotFoundError deve formatar a mensagem corretamente", () => {
-    const error = new AccountNotFoundError("Faker", "KR1");
-    expect(error.message).toBe("Conta Faker#KR1 não encontrada na Riot");
-    expect(error.statusCode).toBe(404);
   });
 
   it("DatabaseError deve ser não-operacional", () => {

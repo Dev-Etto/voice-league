@@ -5,8 +5,8 @@ import {
   type Guild,
   type VoiceChannel,
 } from "discord.js";
+import type { Player } from "../database/db.ts";
 import { getEnv } from "../utils/env.ts";
-import type { PlayerRow } from "../database/db.ts";
 
 const TEAM_LABELS: Record<number, string> = {
   100: "Azul",
@@ -34,7 +34,7 @@ export class VoiceChannelManager {
   async createGameChannel(
     gameId: number,
     teamId: number,
-    triggerPlayer: PlayerRow
+    triggerPlayer: Player
   ): Promise<ManagedChannel | null> {
     const channelKey = this.buildChannelKey(gameId, teamId);
 
@@ -85,7 +85,7 @@ export class VoiceChannelManager {
     }
   }
 
-  async notifyPlayer(player: PlayerRow, gameId: number, teamId: number): Promise<void> {
+  async notifyPlayer(player: Player, gameId: number, teamId: number): Promise<void> {
     const channelKey = this.buildChannelKey(gameId, teamId);
     const managed = this.managedChannels.get(channelKey);
 
@@ -126,9 +126,8 @@ export class VoiceChannelManager {
         return;
       }
 
-      const memberCount = channel.members.size;
-      if (memberCount > 0) {
-        console.log(`👥 Canal ${channel.name} ainda tem ${memberCount} membro(s). Aguardando mais 60s...`);
+      if (channel.members.size > 0) {
+        console.log(`👥 Canal ${channel.name} ainda tem ${channel.members.size} membro(s). Aguardando mais 60s...`);
         setTimeout(() => this.deleteChannel(managed), 60_000);
         return;
       }
@@ -140,9 +139,9 @@ export class VoiceChannelManager {
     }
   }
 
-  private async sendInviteDM(player: PlayerRow, managed: ManagedChannel): Promise<void> {
+  private async sendInviteDM(player: Player, managed: ManagedChannel): Promise<void> {
     try {
-      const user = await this.client.users.fetch(player.discord_id);
+      const user = await this.client.users.fetch(player.discordId);
       const teamLabel = TEAM_LABELS[managed.teamId] ?? "Desconhecido";
 
       await user.send(
@@ -152,9 +151,9 @@ export class VoiceChannelManager {
         `${managed.inviteUrl}`
       );
 
-      console.log(`📨 DM enviada para ${player.game_name} (${player.discord_id})`);
-    } catch (error) {
-      console.warn(`⚠️ Não foi possível enviar DM para ${player.game_name}. DMs desabilitadas?`);
+      console.log(`📨 DM enviada para ${player.gameName} (${player.discordId})`);
+    } catch {
+      console.warn(`⚠️ Não foi possível enviar DM para ${player.gameName}. DMs desabilitadas?`);
     }
   }
 

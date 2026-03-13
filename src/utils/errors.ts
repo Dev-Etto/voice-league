@@ -28,12 +28,6 @@ export class RateLimitError extends RiotApiError {
   }
 }
 
-export class AccountNotFoundError extends RiotApiError {
-  constructor(gameName: string, tagLine: string) {
-    super(`Conta ${gameName}#${tagLine} não encontrada na Riot`, 404);
-  }
-}
-
 export class DatabaseError extends AppError {
   constructor(message: string) {
     super(`Erro no banco de dados: ${message}`, 500, false);

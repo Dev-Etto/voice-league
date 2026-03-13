@@ -26,56 +26,49 @@ const SpectatorSchema = z.object({
 export type RiotAccount = z.infer<typeof AccountSchema>;
 export type ActiveGame = z.infer<typeof SpectatorSchema>;
 
-export class RiotService {
-  private readonly apiKey: string;
-  private readonly baseUrlAccount = "https://americas.api.riotgames.com";
-  private readonly baseUrlSpectator = "https://br1.api.riotgames.com";
+const BASE_URL_ACCOUNT = "https://americas.api.riotgames.com";
+const BASE_URL_SPECTATOR = "https://br1.api.riotgames.com";
 
-  constructor() {
-    this.apiKey = getEnv().RIOT_API_KEY;
+async function request<T>(url: string, schema: z.ZodSchema<T>): Promise<T | null> {
+  const apiKey = getEnv().RIOT_API_KEY;
+
+  const response = await fetch(url, {
+    headers: { "X-Riot-Token": apiKey },
+  });
+
+  if (response.status === 404) return null;
+
+  if (response.status === 429) {
+    const retryAfter = Number(response.headers.get("Retry-After") ?? 10);
+    throw new RateLimitError(retryAfter);
   }
 
-  private async request<T>(url: string, schema: z.ZodSchema<T>): Promise<T | null> {
-    const response = await fetch(url, {
-      headers: { "X-Riot-Token": this.apiKey },
-    });
-
-    if (response.status === 404) return null;
-
-    if (response.status === 429) {
-      const retryAfter = Number(response.headers.get("Retry-After") ?? 10);
-      throw new RateLimitError(retryAfter);
-    }
-
-    if (!response.ok) {
-      throw new RiotApiError(
-        `Riot API respondeu com status ${response.status}`,
-        response.status
-      );
-    }
-
-    const data = await response.json();
-
-    const parsed = schema.safeParse(data);
-    if (!parsed.success) {
-      throw new RiotApiError(
-        `Schema inválido da Riot: ${parsed.error.message}`,
-        response.status
-      );
-    }
-
-    return parsed.data;
+  if (!response.ok) {
+    throw new RiotApiError(
+      `Riot API respondeu com status ${response.status}`,
+      response.status
+    );
   }
 
-  async getAccountByRiotId(gameName: string, tagLine: string): Promise<RiotAccount | null> {
-    const url = `${this.baseUrlAccount}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`;
-    return this.request(url, AccountSchema);
+  const data = await response.json();
+
+  const parsed = schema.safeParse(data);
+  if (!parsed.success) {
+    throw new RiotApiError(
+      `Schema inválido da Riot: ${parsed.error.message}`,
+      response.status
+    );
   }
 
-  async getActiveGameByPuuid(puuid: string): Promise<ActiveGame | null> {
-    const url = `${this.baseUrlSpectator}/lol/spectator/v5/active-games/by-summoner/${puuid}`;
-    return this.request(url, SpectatorSchema);
-  }
+  return parsed.data;
 }
 
-export const riotService = new RiotService();
+export async function getAccountByRiotId(gameName: string, tagLine: string): Promise<RiotAccount | null> {
+  const url = `${BASE_URL_ACCOUNT}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`;
+  return request(url, AccountSchema);
+}
+
+export async function getActiveGameByPuuid(puuid: string): Promise<ActiveGame | null> {
+  const url = `${BASE_URL_SPECTATOR}/lol/spectator/v5/active-games/by-summoner/${puuid}`;
+  return request(url, SpectatorSchema);
+}

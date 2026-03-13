@@ -1,28 +1,23 @@
 import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { eq } from "drizzle-orm";
+import { players, type Player } from "./schema.ts";
 import { DatabaseError } from "../utils/errors.ts";
 
-const db = new Database("VoiceLeague.sqlite");
+const sqlite = new Database("VoiceLeague.sqlite");
+export const db = drizzle(sqlite);
 
-interface PlayerRow {
-  discord_id: string;
-  puuid: string;
-  game_name: string;
-  tag_line: string;
-  last_game_id: string | null;
-  is_active: number;
-}
-
-const initDb = () => {
+export const initDb = () => {
   try {
-    db.run(`
+    sqlite.run(`
       CREATE TABLE IF NOT EXISTS players (
         discord_id TEXT NOT NULL,
         puuid TEXT PRIMARY KEY,
         game_name TEXT NOT NULL,
         tag_line TEXT NOT NULL,
         last_game_id TEXT,
-        is_active INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(discord_id, puuid)
       )
     `);
@@ -32,28 +27,59 @@ const initDb = () => {
   }
 };
 
-const getActivePlayers = (): PlayerRow[] => {
+export const getActivePlayers = (): Player[] => {
   try {
-    return db.query<PlayerRow, []>(
-      "SELECT * FROM players WHERE is_active = 1"
-    ).all();
+    return db.select().from(players).where(eq(players.isActive, true)).all();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new DatabaseError(message);
   }
 };
 
-const updateLastGameId = (puuid: string, gameId: string | null): void => {
+export const getPlayersByDiscordId = (discordId: string): Player[] => {
   try {
-    db.run(
-      "UPDATE players SET last_game_id = ? WHERE puuid = ?",
-      [gameId, puuid]
-    );
+    return db.select().from(players).where(eq(players.discordId, discordId)).all();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new DatabaseError(message);
   }
 };
 
-export { db, initDb, getActivePlayers, updateLastGameId };
-export type { PlayerRow };
+export const upsertPlayer = (discordId: string, puuid: string, gameName: string, tagLine: string): void => {
+  try {
+    db.insert(players)
+      .values({ discordId, puuid, gameName, tagLine })
+      .onConflictDoUpdate({
+        target: players.puuid,
+        set: { discordId, gameName, tagLine },
+      })
+      .run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DatabaseError(message);
+  }
+};
+
+export const updateLastGameId = (puuid: string, gameId: string | null): void => {
+  try {
+    db.update(players)
+      .set({ lastGameId: gameId })
+      .where(eq(players.puuid, puuid))
+      .run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DatabaseError(message);
+  }
+};
+
+export const deletePlayersByDiscordId = (discordId: string): number => {
+  try {
+    const result = db.delete(players)
+      .where(eq(players.discordId, discordId))
+      .run();
+    return result.changes;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DatabaseError(message);
+  }
+};

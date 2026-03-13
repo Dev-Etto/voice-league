@@ -1,25 +1,23 @@
 import type { Client } from "discord.js";
-import { getActivePlayers, updateLastGameId, type PlayerRow } from "../database/db.ts";
-import { riotService, type ActiveGame } from "../services/riot.ts";
+import { getActivePlayers, updateLastGameId, type Player } from "../database/db.ts";
+import { getActiveGameByPuuid, type ActiveGame } from "../services/riot.ts";
 import { VoiceChannelManager } from "../services/voice-channel.ts";
 import { getEnv } from "../utils/env.ts";
 import { RateLimitError } from "../utils/errors.ts";
 
 interface TrackedGame {
   gameId: number;
-  teamPlayers: Map<number, PlayerRow[]>;
+  teamPlayers: Map<number, Player[]>;
   detectedAt: number;
 }
 
 export class WatchdogEngine {
-  private readonly client: Client;
   private readonly voiceManager: VoiceChannelManager;
   private readonly pollingIntervalMs: number;
   private readonly activeGames = new Map<number, TrackedGame>();
   private intervalId: ReturnType<typeof setInterval> | null = null;
 
   constructor(client: Client) {
-    this.client = client;
     this.voiceManager = new VoiceChannelManager(client);
     this.pollingIntervalMs = getEnv().POLLING_INTERVAL_MS;
   }
@@ -41,12 +39,12 @@ export class WatchdogEngine {
   }
 
   private async poll(): Promise<void> {
-    const players = getActivePlayers();
-    if (players.length === 0) return;
+    const playersList = getActivePlayers();
+    if (playersList.length === 0) return;
 
-    console.log(`🔍 Verificando ${players.length} jogador(es)...`);
+    console.log(`🔍 Verificando ${playersList.length} jogador(es)...`);
 
-    for (const player of players) {
+    for (const player of playersList) {
       try {
         await this.checkPlayer(player);
       } catch (error) {
@@ -55,21 +53,21 @@ export class WatchdogEngine {
           await this.sleep(error.retryAfterSeconds * 1000);
           return;
         }
-        console.error(`Erro ao verificar jogador ${player.game_name}:`, error);
+        console.error(`Erro ao verificar jogador ${player.gameName}:`, error);
       }
 
       await this.sleep(1200);
     }
 
-    await this.cleanupFinishedGames(players);
+    await this.cleanupFinishedGames(playersList);
   }
 
-  private async checkPlayer(player: PlayerRow): Promise<void> {
-    const game = await riotService.getActiveGameByPuuid(player.puuid);
+  private async checkPlayer(player: Player): Promise<void> {
+    const game = await getActiveGameByPuuid(player.puuid);
 
     if (!game) {
-      if (player.last_game_id) {
-        const previousGameId = Number(player.last_game_id);
+      if (player.lastGameId) {
+        const previousGameId = Number(player.lastGameId);
         updateLastGameId(player.puuid, null);
         await this.voiceManager.scheduleChannelDeletion(previousGameId);
       }
@@ -87,7 +85,7 @@ export class WatchdogEngine {
     updateLastGameId(player.puuid, String(game.gameId));
   }
 
-  private async handleNewGame(game: ActiveGame, triggerPlayer: PlayerRow): Promise<void> {
+  private async handleNewGame(game: ActiveGame, triggerPlayer: Player): Promise<void> {
     const teamId = this.getPlayerTeam(game, triggerPlayer.puuid);
 
     const trackedGame: TrackedGame = {
@@ -97,12 +95,12 @@ export class WatchdogEngine {
     };
 
     this.activeGames.set(game.gameId, trackedGame);
-    console.log(`🎮 Nova partida detectada: ${game.gameId} | Jogador: ${triggerPlayer.game_name}`);
+    console.log(`🎮 Nova partida detectada: ${game.gameId} | Jogador: ${triggerPlayer.gameName}`);
 
     await this.voiceManager.createGameChannel(game.gameId, teamId, triggerPlayer);
   }
 
-  private async handleExistingGame(game: ActiveGame, player: PlayerRow): Promise<void> {
+  private async handleExistingGame(game: ActiveGame, player: Player): Promise<void> {
     const tracked = this.activeGames.get(game.gameId);
     if (!tracked) return;
 
@@ -127,7 +125,7 @@ export class WatchdogEngine {
     return participant?.teamId ?? 0;
   }
 
-  private async cleanupFinishedGames(currentPlayers: PlayerRow[]): Promise<void> {
+  private async cleanupFinishedGames(currentPlayers: Player[]): Promise<void> {
     const activePuuids = new Set(currentPlayers.map((p) => p.puuid));
 
     for (const [gameId, tracked] of this.activeGames) {
@@ -141,10 +139,6 @@ export class WatchdogEngine {
         console.log(`🧹 Partida ${gameId} removida do tracking.`);
       }
     }
-  }
-
-  getActiveGames(): Map<number, TrackedGame> {
-    return this.activeGames;
   }
 
   private sleep(ms: number): Promise<void> {

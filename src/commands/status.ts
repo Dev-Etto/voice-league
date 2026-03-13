@@ -1,6 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, type ChatInputCommandInteraction } from "discord.js";
-import { db } from "../database/db.ts";
-import type { PlayerRow } from "../database/db.ts";
+import { getPlayersByDiscordId } from "../database/db.ts";
 
 export const statusCommand = {
   data: new SlashCommandBuilder()
@@ -11,11 +10,9 @@ export const statusCommand = {
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      const players = db.query<PlayerRow, [string]>(
-        "SELECT * FROM players WHERE discord_id = ?"
-      ).all(interaction.user.id);
+      const playersList = getPlayersByDiscordId(interaction.user.id);
 
-      if (players.length === 0) {
+      if (playersList.length === 0) {
         return interaction.editReply(
           "⚠️ Você não possui nenhuma conta vinculada. Use `/register` para começar."
         );
@@ -26,13 +23,13 @@ export const statusCommand = {
         .setColor(0x5865F2)
         .setTimestamp();
 
-      for (const player of players) {
-        const isInGame = player.last_game_id !== null;
+      for (const player of playersList) {
+        const isInGame = player.lastGameId !== null;
         const statusIcon = isInGame ? "🟢 Em partida" : "⚪ Fora de partida";
-        const activeIcon = player.is_active ? "✅ Monitorando" : "⏸️ Pausado";
+        const activeIcon = player.isActive ? "✅ Monitorando" : "⏸️ Pausado";
 
         embed.addFields({
-          name: `${player.game_name}#${player.tag_line}`,
+          name: `${player.gameName}#${player.tagLine}`,
           value: `${statusIcon} | ${activeIcon}`,
           inline: false,
         });
