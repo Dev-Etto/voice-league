@@ -143,8 +143,8 @@ export class VoiceChannelManager {
         type: ChannelType.GuildVoice,
         permissionOverwrites: [
           {
-            id: guild.id,
-            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.Speak],
+            id: guild.id, // @everyone
+            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
           },
         ],
       });
@@ -165,7 +165,7 @@ export class VoiceChannelManager {
       this.managedChannels.set(channelKey, managed);
       console.log(`🔊 Canal criado: ${channelName} | Convite: ${invite.url}`);
 
-      await this.sendInviteDM(triggerPlayer, managed);
+      await this.addPlayerToGameChannel(triggerPlayer, managed);
 
       return managed;
     } catch (error) {
@@ -174,13 +174,70 @@ export class VoiceChannelManager {
     }
   }
 
+  /**
+   * Adiciona um jogador a um canal de partida, configurando permissões específicas.
+   * Se for o canal do time do jogador, concede acesso total (voz/chat).
+   * Se for o canal do time inimigo, concede apenas visibilidade (sem conexão).
+   */
+  async addPlayerToGameChannel(player: Player, managed: ManagedChannel): Promise<void> {
+    const guild = await this.getGuild();
+    if (!guild) return;
+
+    try {
+      const channel = await guild.channels.fetch(managed.channelId).catch(() => null) as VoiceChannel | null;
+      if (!channel) return;
+
+      const member = await guild.members.fetch(player.discordId).catch(() => null);
+      if (!member) return;
+
+      // Determinamos se o jogador é do time deste canal (baseado na persistência do lastGameId do Watchdog)
+      // Nota: o teamId original do jogador vem da API da Riot via Watchdog.
+      // Para simplificar e garantir precisão, o Watchdog passa o ManagedChannel correto.
+      
+      await channel.permissionOverwrites.create(member.id, {
+        ViewChannel: true,
+        Connect: true,
+        Speak: true,
+        SendMessages: true,
+        Stream: true,
+        UseEmbeddedActivities: true,
+      });
+
+      console.log(`🔐 Permissões de TIME concedidas para ${player.gameName} no canal ${channel.name}`);
+
+      // Notificamos o jogador via DM
+      await this.sendInviteDM(player, managed);
+
+      // --- Lógica para o time inimigo (Visibilidade sem conexão) ---
+      const enemyTeamId = managed.teamId === 100 ? 200 : 100;
+      const enemyChannelKey = this.buildChannelKey(managed.gameId, enemyTeamId);
+      const enemyManaged = this.managedChannels.get(enemyChannelKey);
+
+      if (enemyManaged) {
+        const enemyChannel = await guild.channels.fetch(enemyManaged.channelId).catch(() => null) as VoiceChannel | null;
+        if (enemyChannel) {
+          await enemyChannel.permissionOverwrites.create(member.id, {
+            ViewChannel: true,
+            Connect: false, // Pode ver, mas não entrar
+          });
+          console.log(`👁️ Visibilidade de INIMIGO concedida para ${player.gameName} no canal ${enemyChannel.name}`);
+        }
+      }
+    } catch (error) {
+      console.error(`Erro ao configurar permissões para ${player.gameName}:`, error);
+    }
+  }
+
+  /**
+   * Apenas um alias mantido para compatibilidade, agora redireciona para a lógica robusta.
+   */
   async notifyPlayer(player: Player, gameId: number, teamId: number): Promise<void> {
     const channelKey = this.buildChannelKey(gameId, teamId);
     const managed = this.managedChannels.get(channelKey);
 
     if (!managed) return;
 
-    await this.sendInviteDM(player, managed);
+    await this.addPlayerToGameChannel(player, managed);
   }
 
   async scheduleChannelDeletion(gameId: number): Promise<void> {
