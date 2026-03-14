@@ -5,7 +5,8 @@ import { DatabaseError } from "../utils/errors.ts";
 import { players, type Player } from "./schema.ts";
 export type { Player };
 
-const sqlite = new Database("VoiceLeague.sqlite");
+const databasePath = process.env.DATABASE_PATH || "VoiceLeague.sqlite";
+const sqlite = new Database(databasePath);
 export const db = drizzle(sqlite);
 
 export const initDb = () => {

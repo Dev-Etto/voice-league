@@ -1,0 +1,10 @@
+node_modules
+.git
+.github
+.env
+*.sqlite
+*.sqlite-journal
+dist
+build
+.antigravity
+.gemini
