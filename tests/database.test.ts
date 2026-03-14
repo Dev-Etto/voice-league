@@ -2,29 +2,18 @@ import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
+import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { players } from "../src/database/schema.ts";
 
 describe("Database (Drizzle)", () => {
   let sqlite: Database;
   let db: ReturnType<typeof drizzle>;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     sqlite = new Database(":memory:");
     db = drizzle(sqlite);
-
-    sqlite.run(`
-      CREATE TABLE IF NOT EXISTS players (
-        discord_id TEXT NOT NULL,
-        puuid TEXT PRIMARY KEY,
-        game_name TEXT NOT NULL,
-        tag_line TEXT NOT NULL,
-        last_game_id TEXT,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(discord_id, puuid)
-      )
-    `);
+    
+    await migrate(db, { migrationsFolder: "./drizzle" });
   });
 
   afterAll(() => {
