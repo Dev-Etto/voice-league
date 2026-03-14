@@ -23,8 +23,10 @@ export class WatchdogEngine {
     this.pollingIntervalMs = getEnv().POLLING_INTERVAL_MS;
   }
 
-  start(): void {
+  async start(): Promise<void> {
     if (this.intervalId) return;
+
+    await this.voiceManager.initializeFromGuild();
 
     console.log(`🐕 Watchdog iniciado (polling a cada ${this.pollingIntervalMs / 1000}s)`);
     this.poll();
@@ -88,6 +90,10 @@ export class WatchdogEngine {
     }
 
     await this.cleanupFinishedGames(playersList);
+
+    // Limpeza profunda de canais órfãos a cada ciclo de poll
+    const activeGameIds = new Set(this.activeGames.keys());
+    await this.voiceManager.pruneEmptyChannels(activeGameIds);
   }
 
   private async checkPlayer(player: Player, allPlayers: Player[]): Promise<void> {

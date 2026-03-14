@@ -31,6 +31,82 @@ export class VoiceChannelManager {
     this.client = client;
   }
 
+  /**
+   * Reconstrói o estado interno a partir dos canais existentes no Discord.
+   * Útil para manter o controle após um reinício do bot.
+   */
+  async initializeFromGuild(): Promise<void> {
+    console.log("🔍 Sincronizando canais de voz existentes...");
+    const guild = await this.getGuild();
+    if (!guild) return;
+
+    try {
+      const channels = await guild.channels.fetch();
+      const voiceChannels = channels.filter(
+        (c): c is VoiceChannel => 
+          c !== null && 
+          c.type === ChannelType.GuildVoice && 
+          c.name.startsWith("🔊 Time")
+      );
+
+      for (const [, channel] of voiceChannels) {
+        const match = channel.name.match(/Time (Azul|Vermelho) - (\d+)/);
+        if (!match) continue;
+
+        const [, teamLabel, gameIdStr] = match;
+        const gameId = Number(gameIdStr);
+        const teamId = teamLabel === "Azul" ? 100 : 200;
+        const channelKey = this.buildChannelKey(gameId, teamId);
+
+        if (!this.managedChannels.has(channelKey)) {
+          this.managedChannels.set(channelKey, {
+            gameId,
+            teamId,
+            channelId: channel.id,
+            inviteUrl: "Recuperado - Link indisponível",
+            createdAt: channel.createdTimestamp,
+          });
+        }
+      }
+
+      console.log(`✅ ${this.managedChannels.size} canais sincronizados.`);
+    } catch (error) {
+      console.error("Erro ao sincronizar canais:", error);
+    }
+  }
+
+  /**
+   * Remove canais que não têm membros e que não estão mais sendo rastreados como ativos.
+   */
+  async pruneEmptyChannels(activeGameIds: Set<number>): Promise<void> {
+    const guild = await this.getGuild();
+    if (!guild) return;
+
+    for (const [key, managed] of this.managedChannels.entries()) {
+      if (activeGameIds.has(managed.gameId)) continue;
+
+      try {
+        const channel = await guild.channels.fetch(managed.channelId).catch(() => null) as VoiceChannel | null;
+        
+        if (!channel) {
+          this.managedChannels.delete(key);
+          continue;
+        }
+
+        if (channel.members.size === 0) {
+          const ageMs = Date.now() - managed.createdAt;
+          if (ageMs < 5 * 60 * 1000) continue;
+
+          await channel.delete("Limpeza de canais órfãos");
+          this.managedChannels.delete(key);
+          console.log(`🧹 Canal órfão deletado: ${channel.name}`);
+        }
+      } catch (error) {
+        console.error(`Erro ao limpar canal ${managed.channelId}:`, error);
+      }
+    }
+  }
+
   async createGameChannel(
     gameId: number,
     teamId: number,
@@ -48,6 +124,20 @@ export class VoiceChannelManager {
     try {
       const teamLabel = TEAM_LABELS[teamId] ?? "Desconhecido";
       const channelName = `🔊 Time ${teamLabel} - ${gameId}`;
+
+      // Segurança: Verifica se já existe um canal com esse nome no Discord
+      const existingChannel = guild.channels.cache.find(c => c.name === channelName) as VoiceChannel | undefined;
+      if (existingChannel) {
+        const managed: ManagedChannel = {
+          gameId,
+          teamId,
+          channelId: existingChannel.id,
+          inviteUrl: "Reutilizado - Link indisponível",
+          createdAt: existingChannel.createdTimestamp,
+        };
+        this.managedChannels.set(channelKey, managed);
+        return managed;
+      }
 
       const voiceChannel = await guild.channels.create({
         name: channelName,

@@ -49,13 +49,13 @@ async function deployCommands() {
   }
 }
 
-client.once(Events.ClientReady, (readyClient) => {
+client.once(Events.ClientReady, async (readyClient) => {
   console.log(`🛡️ VoiceLeague online como ${readyClient.user.tag}`);
   initDb();
-  deployCommands();
+  await deployCommands();
 
   const watchdog = new WatchdogEngine(readyClient);
-  watchdog.start();
+  await watchdog.start();
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
