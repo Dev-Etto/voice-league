@@ -1,0 +1,1 @@
+ALTER TABLE `players` ADD `last_seen_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL;

@@ -23,6 +23,9 @@ interface ManagedChannel {
   createdAt: number;
 }
 
+/**
+ * Gerencia os canais de voz do servidor.
+ */
 export class VoiceChannelManager {
   public readonly client: Client;
   private readonly managedChannels = new Map<string, ManagedChannel>();
@@ -94,8 +97,6 @@ export class VoiceChannelManager {
         }
 
         if (channel.members.size === 0) {
-          // Se o canal está vazio e não está no tracking ativo, deletamos.
-          // Mantemos uma pequena carência de 30s apenas para canais sincronizados AGORA
           const ageMs = Date.now() - managed.createdAt;
           if (ageMs < 30 * 1000) continue;
 
@@ -109,6 +110,9 @@ export class VoiceChannelManager {
     }
   }
 
+  /**
+   * Cria um canal de voz para uma partida e configura as permissões para os jogadores.
+   */
   async createGameChannel(
     gameId: number,
     teamId: number,
@@ -145,7 +149,7 @@ export class VoiceChannelManager {
         type: ChannelType.GuildVoice,
         permissionOverwrites: [
           {
-            id: guild.id, // @everyone
+            id: guild.id,
             deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
           },
         ],
@@ -191,10 +195,6 @@ export class VoiceChannelManager {
 
       const member = await guild.members.fetch(player.discordId).catch(() => null);
       if (!member) return;
-
-      // Determinamos se o jogador é do time deste canal (baseado na persistência do lastGameId do Watchdog)
-      // Nota: o teamId original do jogador vem da API da Riot via Watchdog.
-      // Para simplificar e garantir precisão, o Watchdog passa o ManagedChannel correto.
       
       await channel.permissionOverwrites.create(member.id, {
         ViewChannel: true,
@@ -207,10 +207,8 @@ export class VoiceChannelManager {
 
       console.log(`🔐 Permissões de TIME concedidas para ${player.gameName} no canal ${channel.name}`);
 
-      // Notificamos o jogador via DM
       await this.sendInviteDM(player, managed);
 
-      // --- Lógica para o time inimigo (Visibilidade sem conexão) ---
       const enemyTeamId = managed.teamId === 100 ? 200 : 100;
       const enemyChannelKey = this.buildChannelKey(managed.gameId, enemyTeamId);
       const enemyManaged = this.managedChannels.get(enemyChannelKey);
@@ -220,7 +218,7 @@ export class VoiceChannelManager {
         if (enemyChannel) {
           await enemyChannel.permissionOverwrites.create(member.id, {
             ViewChannel: true,
-            Connect: false, // Pode ver, mas não entrar
+            Connect: false,
           });
           console.log(`👁️ Visibilidade de INIMIGO concedida para ${player.gameName} no canal ${enemyChannel.name}`);
         }
@@ -231,7 +229,7 @@ export class VoiceChannelManager {
   }
 
   /**
-   * Apenas um alias mantido para compatibilidade, agora redireciona para a lógica robusta.
+   * Notifica um jogador sobre a partida e adiciona ele ao canal de voz.
    */
   async notifyPlayer(player: Player, gameId: number, teamId: number): Promise<void> {
     const channelKey = this.buildChannelKey(gameId, teamId);
@@ -242,6 +240,9 @@ export class VoiceChannelManager {
     await this.addPlayerToGameChannel(player, managed);
   }
 
+  /**
+   * Agenda a deleção dos canais de uma partida após um delay de 5 minutos.
+   */
   async scheduleChannelDeletion(gameId: number): Promise<void> {
     const channelsToDelete = [...this.managedChannels.entries()]
       .filter(([, managed]) => managed.gameId === gameId);
@@ -258,10 +259,17 @@ export class VoiceChannelManager {
     }, POST_GAME_DELAY_MS);
   }
 
+
+  /**
+   * Verifica se existe um canal para a partida.
+   */
   hasChannelForGame(gameId: number, teamId: number): boolean {
     return this.managedChannels.has(this.buildChannelKey(gameId, teamId));
   }
 
+  /**
+   * Deleta um canal de voz.
+   */
   private async deleteChannel(managed: ManagedChannel): Promise<void> {
     try {
       const guild = await this.getGuild();
@@ -287,6 +295,9 @@ export class VoiceChannelManager {
     }
   }
 
+  /**
+   * Envia um convite para o jogador.
+   */
   private async sendInviteDM(player: Player, managed: ManagedChannel): Promise<void> {
     try {
       const user = await this.client.users.fetch(player.discordId);
@@ -305,6 +316,9 @@ export class VoiceChannelManager {
     }
   }
 
+  /**
+   * Busca a guild no Discord.
+   */
   private async getGuild(): Promise<Guild | null> {
     try {
       return await this.client.guilds.fetch(getEnv().GUILD_ID);
@@ -314,6 +328,9 @@ export class VoiceChannelManager {
     }
   }
 
+  /**
+   * Constrói a chave do canal.
+   */
   private buildChannelKey(gameId: number, teamId: number): string {
     return `${gameId}-${teamId}`;
   }

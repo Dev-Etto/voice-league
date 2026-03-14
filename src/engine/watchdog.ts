@@ -1,5 +1,5 @@
 import type { Client } from "discord.js";
-import { getActivePlayers, updateLastGameId, type Player } from "../database/db.ts";
+import { getActivePlayers, updateLastGameId, updatePlayerActivity, deactivateInactivePlayers, type Player } from "../database/db.ts";
 import { getActiveGameByPuuid, type ActiveGame } from "../services/riot.ts";
 import { VoiceChannelManager } from "../services/voice-channel.ts";
 import { getEnv } from "../utils/env.ts";
@@ -70,6 +70,10 @@ export class WatchdogEngine {
           act => act.name.toLowerCase().includes("league of legends")
         );
 
+        if (isPlayingLoL || member?.presence?.status === "online" || member?.presence?.status === "dnd") {
+          updatePlayerActivity(player.puuid);
+        }
+
         if (!isPlayingLoL && !player.lastGameId) {
           continue;
         }
@@ -100,6 +104,8 @@ export class WatchdogEngine {
 
       const activeGameIds = new Set(this.activeGames.keys());
       await this.voiceManager.pruneEmptyChannels(activeGameIds);
+
+      await this.processInactivityCleanup();
     } finally {
       this.isPolling = false;
     }
@@ -189,6 +195,27 @@ export class WatchdogEngine {
         this.activeGames.delete(gameId);
         await this.voiceManager.scheduleChannelDeletion(gameId);
         console.log(`🧹 Partida ${gameId} removida do tracking.`);
+      }
+    }
+  }
+
+  private async processInactivityCleanup(): Promise<void> {
+    const inactiveDays = getEnv().INACTIVITY_DAYS;
+    const deactivatedCount = deactivateInactivePlayers(inactiveDays);
+
+    for (const player of deactivatedCount) {
+      console.log(`💤 Jogador inativado por ausência: ${player.gameName}`);
+      try {
+        const user = await this.voiceManager.client.users.fetch(player.discordId);
+        await user.send(
+          `😴 **Notificação de Inatividade - VoiceLeague**\n\n` +
+          `Olá! Notamos que você está ausente do League of Legends há mais de ${inactiveDays} dias.\n` +
+          `Para economizar recursos, pausamos o monitoramento automático da sua conta.\n\n` +
+          `✨ **Como voltar?**\n` +
+          `Basta usar o comando \`/register\` novamente e você voltará a ser monitorado imediatamente!`
+        );
+      } catch {
+        console.warn(`⚠️ Não foi possível avisar o jogador ${player.gameName} sobre a inativação.`);
       }
     }
   }

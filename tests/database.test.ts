@@ -20,6 +20,7 @@ describe("Database (Drizzle)", () => {
         tag_line TEXT NOT NULL,
         last_game_id TEXT,
         is_active INTEGER NOT NULL DEFAULT 1,
+        last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(discord_id, puuid)
       )
@@ -93,10 +94,11 @@ describe("Database (Drizzle)", () => {
   });
 
   it("deve deletar jogador por discordId", () => {
-    const result = db.delete(players)
+    db.delete(players)
       .where(eq(players.discordId, "999"))
       .run();
 
-    expect(result.changes).toBe(1);
+    const remaining = db.select().from(players).where(eq(players.puuid, "puuid-abc")).all();
+    expect(remaining.length).toBe(0);
   });
 });

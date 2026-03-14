@@ -6,6 +6,7 @@ const EnvSchema = z.object({
   GUILD_ID: z.string().min(1, "GUILD_ID é obrigatório"),
   RIOT_API_KEY: z.string().min(1, "RIOT_API_KEY é obrigatório"),
   POLLING_INTERVAL_MS: z.coerce.number().int().positive().default(30000),
+  INACTIVITY_DAYS: z.coerce.number().int().positive().default(7),
 });
 
 type Env = z.infer<typeof EnvSchema>;

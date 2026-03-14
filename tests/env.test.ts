@@ -22,6 +22,7 @@ describe("Env Validation", () => {
     GUILD_ID: z.string().min(1),
     RIOT_API_KEY: z.string().min(1),
     POLLING_INTERVAL_MS: z.coerce.number().int().positive().default(30000),
+    INACTIVITY_DAYS: z.coerce.number().int().positive().default(7),
   });
 
   it("deve validar env completo com sucesso", () => {
