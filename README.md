@@ -9,99 +9,113 @@
 [![Discord.js](https://img.shields.io/badge/lib-discord.js-5865F2?logo=discord&logoColor=fff)](https://discord.js.org/)
 [![Drizzle ORM](https://img.shields.io/badge/ORM-Drizzle-C5F74F?logo=drizzle&logoColor=000)](https://orm.drizzle.team/)
 
-Bot de Discord que detecta automaticamente quando um jogador registrado entra em partida no LoL, cria um canal de voz temporário e envia o convite via DM. Otimizado com monitoramento de presença para máxima economia de API.
+O **VoiceLeague** é um bot de Discord engenheirado para automatizar a comunicação de times de League of Legends. Ele detecta quando um jogador registrado entra em partida, cria instantaneamente um canal de voz temporário e gerencia o ciclo de vida deste canal até o fim do jogo.
 
 </div>
 
 ---
 
-## 📋 Índice
+## 🚀 Tecnologias
 
-- [Por que o VoiceLeague?](#-por-que-o-voiceleague)
-- [Tecnologias](#-tecnologias)
-- [Arquitetura](#-arquitetura)
-- [Pré-requisitos](#-pré-requisitos)
-- [Instalação](#-instalação)
-- [Scripts Disponíveis](#-scripts-disponíveis)
-- [Roadmap](#-roadmap)
+O projeto utiliza o estado da arte do ecossistema TypeScript moderno para garantir performance e baixa latência:
 
----
-
-## 🎯 Por que o VoiceLeague?
-
-O **VoiceLeague** automatiza a comunicação do seu time:
-
-1. 🔍 **Presença Inteligente**: Monitora o status do Discord para saber quando você abre o LoL.
-2. 🔊 **Canais Sob Demanda**: Cria um canal de voz exclusivo assim que a partida começa.
-3. 📨 **Convite Automático**: Envia o link do canal via DM para facilitar o compartilhamento.
-4. 🧹 **Otimização Extrema**: Só consome API da Riot quando você está efetivamente jogando.
+- **Runtime**: [Bun](https://bun.sh) para execução ultra-rápida e gerenciamento de dependências.
+- **Linguagem**: TypeScript (Strict Mode) para máxima segurança de tipos.
+- **Interface**: [Discord.js](https://discord.js.org/) para interação com a API do Discord.
+- **ORM & Banco**: [Drizzle ORM](https://orm.drizzle.team/) com [SQLite](https://www.sqlite.org/) para persistência leve e eficiente.
+- **Validação**: [Zod](https://zod.dev/) para validação de esquemas e variáveis de ambiente.
+- **Integração**: Riot Games API (Active Games V5).
 
 ---
 
-## 🏗 Arquitetura & Otimização
+## 🏗️ Arquitetura
 
-O projeto utiliza um **Watchdog Engine** com duas camadas de filtragem:
-- **Layer 1 (Subscrição)**: Monitora apenas jogadores que ativaram o registro.
-- **Layer 2 (Discord Presence)**: Filtra apenas jogadores com status "Playing League of Legends" no Discord antes de consultar a Riot API.
-- **Layer 3 (Bulk Discovery)**: Se um jogador é detectado em partida, o bot identifica todos os outros aliados registrados na mesma partida em uma única chamada de API.
+O projeto segue princípios de **Clean Architecture** e **SOLID**, garantindo manutenibilidade e escalabilidade:
 
----
-
-## 📦 Pré-requisitos
-
-### Discord Developer Portal
-No menu **Bot** -> **Privileged Gateway Intents**, ative:
-- ✅ **PRESENCE INTENT** (Obrigatório para a otimização de polling)
-- ✅ **SERVER MEMBERS INTENT** (Recomendado)
-- ✅ **MESSAGE CONTENT INTENT** (Para suporte a comandos legados, se houver)
-
-### Permissões do Bot
-Convide o bot com as seguintes permissões:
-- `Manage Channels`
-- `Move Members`
-- `Create Instant Invite`
+- **Service Layer**: Abstrai as integrações externas (Riot API e Discord Voice Manager).
+- **Engine (Watchdog)**: O núcleo do sistema que processa a lógica de monitoramento em tempo real.
+- **Command Pattern**: Implementação desacoplada dos comandos slash do Discord.
+- **Repository Pattern (via Drizzle)**: Camada de persistência isolada das regras de negócio.
+- **Otimização de Polling**: Sistema de filtragem em 3 camadas (Subscription -> Presence -> Riot Query) para minimizar chamadas desnecessárias à API.
 
 ---
 
-## 🚀 Instalação & Uso
+## 🛠️ Pré-requisitos e Instalação
+
+### Pré-requisitos
+
+1. **Bun** instalado em sua máquina.
+2. **Discord Developer Portal**:
+   - Ative **PRESENCE INTENT** e **GUILD_VOICE_STATES**.
+   - Crie um bot e obtenha o `DISCORD_TOKEN` e `CLIENT_ID`.
+3. **Riot Developer Portal**:
+   - Obtenha uma `RIOT_TOKEN` (API Key).
+
+### Instalação
 
 ```bash
-# Instalação
+# Clone o repositório
+git clone https://github.com/Dev-Etto/VoiceLeague.git
+
+# Instale as dependências
 bun install
 
-# Configuração
+# Configure as variáveis de ambiente
 cp .env.example .env
+# Preencha o .env com suas chaves
 
-# Banco de Dados (Gerar e Aplicar Schema)
+# Prepare o banco de dados
 bun run db:push
 
-# Iniciar
+# Inicie em modo de desenvolvimento
 bun run dev
 ```
 
 ---
 
-## 📜 Scripts Disponíveis
+## 📜 Documentação de Comandos (Interface)
 
-| Script | Comando | Descrição |
+| Comando | Parâmetros | Descrição |
 |---|---|---|
-| `db:generate` | `drizzle-kit generate` | Gera migrations SQL |
-| `db:push` | `drizzle-kit push` | Sincroniza schema sem migrations (Dev) |
-| `db:studio` | `drizzle-kit studio` | Interface visual do banco de dados |
-| `test` | `bun test` | Executa suíte de testes unitários |
+| `/register` | `name`, `tag` | Registra sua conta do LoL (ex: `Faker#KR1`) para monitoramento automático. |
+| `/status` | - | Verifica o status atual do seu registro e se há uma partida sendo monitorada. |
+| `/unregister` | - | Remove seu registro e interrompe o monitoramento automático. |
 
 ---
 
-## 🗺️ Roadmap (Issues Abertas)
+## 💎 Padrões de Código
 
-O projeto está em constante evolução. Confira nossas prioridades:
-- [#1](https://github.com/Dev-Etto/VoiceLeague/issues/1): Leaderboard de Vitórias e Estatísticas.
-- [#2](https://github.com/Dev-Etto/VoiceLeague/issues/2): Nomes de Canais com o nome do Campeão.
-- [#3](https://github.com/Dev-Etto/VoiceLeague/issues/3): Comando para pausar/resumir monitoramento.
-- [#4](https://github.com/Dev-Etto/VoiceLeague/issues/4): Inativação automática de jogadores ausentes.
+Este projeto prioriza a qualidade técnica e segue rigorosamente:
+
+- **Clean Code & SOLID**: Código modular, legível e de responsabilidade única.
+- **TypeScript Estrito**: Tipagem detalhada sem o uso de `any`.
+- **Early Return**: Lógica limpa evitando aninhamentos desnecessários (if/else).
+- **Tratamento de Erros Robusto**: Middlewares e wrappers globais para capturar exceções silenciosas.
+- **Imutabilidade**: Uso preferencial de métodos funcionais (`map`, `filter`, `reduce`).
+
+---
+
+## 📦 Scripts Disponíveis
+
+| Script | Comando | Descrição |
+|---|---|---|
+| `dev` | `bun --watch src/index.ts` | Inicia o bot em modo live-reload (Desenvolvimento). |
+| `start` | `bun src/index.ts` | Inicia o bot em modo de produção. |
+| `test` | `bun test` | Executa a suíte de testes unitários com Bun Test. |
+| `db:push` | `drizzle-kit push` | Sincroniza o schema do Drizzle com o SQLite local. |
+| `db:studio` | `drizzle-kit studio` | Abre o painel visual para gerenciar o banco de dados. |
+
+---
+
+## 🤝 Como Contribuir
+
+1. Faça um **Fork** do projeto.
+2. Crie uma **Branch** para sua funcionalidade (`git checkout -b feature/nova-feature`).
+3. Siga os padrões de escrita e **Commits Semânticos**.
+4. Abra um **Pull Request** detalhando suas alterações.
 
 ---
 
 <div align="center">
-Desenvolvido por <a href="https://github.com/Dev-Etto">Dev-Etto</a>
+Desenvolvido com ❤️ por <a href="https://github.com/Dev-Etto">Dev-Etto</a>
 </div>
