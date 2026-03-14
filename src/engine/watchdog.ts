@@ -101,23 +101,22 @@ export class WatchdogEngine {
 
     if (!game) {
       if (player.lastGameId) {
-        const previousGameId = Number(player.lastGameId);
         updateLastGameId(player.puuid, null);
-        await this.voiceManager.scheduleChannelDeletion(previousGameId);
       }
       return;
     }
 
     const participantPuuids = new Set(game.participants.map(p => p.puuid));
-    for (const p of allPlayers) {
-      if (participantPuuids.has(p.puuid)) {
-        this.checkedPuuids.add(p.puuid);
-        if (p.puuid !== player.puuid) {
-          updateLastGameId(p.puuid, String(game.gameId));
-        }
-      }
-    }
+    const alliesInGame = allPlayers.filter(p => participantPuuids.has(p.puuid));
 
+    for (const ally of alliesInGame) {
+      this.checkedPuuids.add(ally.puuid);
+      updateLastGameId(ally.puuid, String(game.gameId));
+      await this.processPlayerInGame(game, ally);
+    }
+  }
+
+  private async processPlayerInGame(game: ActiveGame, player: Player): Promise<void> {
     const isAlreadyTracked = this.activeGames.has(game.gameId);
 
     if (isAlreadyTracked) {
@@ -126,7 +125,6 @@ export class WatchdogEngine {
     }
 
     await this.handleNewGame(game, player);
-    updateLastGameId(player.puuid, String(game.gameId));
   }
 
   private async handleNewGame(game: ActiveGame, triggerPlayer: Player): Promise<void> {
