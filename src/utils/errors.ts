@@ -39,3 +39,10 @@ export class ValidationError extends AppError {
     super(message, 400);
   }
 }
+
+export class ConfigError extends AppError {
+  constructor(message: string) {
+    super(`Erro de Configuração: ${message}`, 500, false);
+  }
+}
+

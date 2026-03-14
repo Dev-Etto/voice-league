@@ -4,6 +4,8 @@ import { getActiveGameByPuuid, type ActiveGame } from "../services/riot.ts";
 import { VoiceChannelManager } from "../services/voice-channel.ts";
 import { getEnv } from "../utils/env.ts";
 import { RateLimitError, RiotApiError } from "../utils/errors.ts";
+import { safeAsync } from "../utils/safe-async.ts";
+
 
 interface TrackedGame {
   gameId: number;
@@ -47,69 +49,73 @@ export class WatchdogEngine {
     if (this.isPolling) return;
     this.isPolling = true;
 
-    try {
-      const playersList = getActivePlayers();
-      
-      const guildId = getEnv().GUILD_ID;
-      const guild = await this.voiceManager.client.guilds.fetch(guildId).catch(() => null);
-      
-      if (!guild) {
-        console.error("❌ Guild não encontrada. Verifique o GUILD_ID no .env");
-        return;
-      }
-
-      console.log(`🔍 Verificando players ativos...`);
-      this.checkedPuuids.clear();
-
-      if (playersList.length > 0) {
-        for (const player of playersList) {
-          if (this.checkedPuuids.has(player.puuid)) continue;
-
-        const member = await guild.members.fetch(player.discordId).catch(() => null);
-        const isPlayingLoL = member?.presence?.activities.some(
-          act => act.name.toLowerCase().includes("league of legends")
-        );
-
-        if (isPlayingLoL || member?.presence?.status === "online" || member?.presence?.status === "dnd") {
-          updatePlayerActivity(player.puuid);
-        }
-
-        if (!isPlayingLoL && !player.lastGameId) {
-          continue;
-        }
-
-        try {
-          await this.checkPlayer(player, playersList);
-        } catch (error) {
-          if (error instanceof RateLimitError) {
-            console.warn(`⏳ Rate limit atingido. Pausando poll por ${error.retryAfterSeconds}s.`);
-            await this.sleep(error.retryAfterSeconds * 1000);
-            return;
-          }
-          
-          if (error instanceof RiotApiError && error.riotStatusCode === 401) {
-            console.error(`🛑 ERRO CRÍTICO: ${error.message}`);
-            this.stop();
-            return;
-          }
-
-          console.error(`Erro ao verificar jogador ${player.gameName}:`, error);
-        }
-
-        await this.sleep(1200);
-        }
-      }
-
-      await this.cleanupFinishedGames();
-
-      const activeGameIds = new Set(this.activeGames.keys());
-      await this.voiceManager.pruneEmptyChannels(activeGameIds);
-
-      await this.processInactivityCleanup();
-    } finally {
+    const guildId = getEnv().GUILD_ID;
+    const guildResult = await safeAsync(this.voiceManager.client.guilds.fetch(guildId));
+    
+    if (!guildResult.success) {
+      console.error("❌ Erro ao buscar guild:", guildResult.error.message);
       this.isPolling = false;
+      return;
     }
+
+    const guild = guildResult.data;
+    console.log(`🔍 Verificando players ativos...`);
+    this.checkedPuuids.clear();
+
+    const playersList = getActivePlayers();
+
+    for (const player of playersList) {
+      if (this.checkedPuuids.has(player.puuid)) continue;
+
+      const memberResult = await safeAsync(guild.members.fetch(player.discordId));
+      const member = memberResult.success ? memberResult.data : null;
+
+      const isPlayingLoL = member?.presence?.activities.some(
+        act => act.name.toLowerCase().includes("league of legends")
+      );
+
+      if (isPlayingLoL || member?.presence?.status === "online" || member?.presence?.status === "dnd") {
+        updatePlayerActivity(player.puuid);
+      }
+
+      if (!isPlayingLoL && !player.lastGameId) {
+        continue;
+      }
+
+      const checkResult = await safeAsync(this.checkPlayer(player, playersList));
+      
+      if (!checkResult.success) {
+        const { error } = checkResult;
+        
+        if (error instanceof RateLimitError) {
+          console.warn(`⏳ Rate limit atingido. Pausando poll por ${error.retryAfterSeconds}s.`);
+          await this.sleep(error.retryAfterSeconds * 1000);
+          this.isPolling = false;
+          return;
+        }
+        
+        if (error instanceof RiotApiError && error.riotStatusCode === 401) {
+          console.error(`🛑 ERRO CRÍTICO: ${error.message}`);
+          this.stop();
+          this.isPolling = false;
+          return;
+        }
+
+        console.error(`Erro ao verificar jogador ${player.gameName}:`, error.message);
+      }
+
+      await this.sleep(1200);
+    }
+
+    await this.cleanupFinishedGames();
+
+    const activeGameIds = new Set(this.activeGames.keys());
+    await this.voiceManager.pruneEmptyChannels(activeGameIds);
+
+    await this.processInactivityCleanup();
+    this.isPolling = false;
   }
+
 
   private async checkPlayer(player: Player, allPlayers: Player[]): Promise<void> {
     const game = await getActiveGameByPuuid(player.puuid);
@@ -155,7 +161,8 @@ export class WatchdogEngine {
     this.activeGames.set(game.gameId, trackedGame);
     console.log(`🎮 Nova partida detectada: ${game.gameId} | Jogador: ${triggerPlayer.gameName}`);
 
-    await this.voiceManager.createGameChannel(game.gameId, teamId, triggerPlayer);
+    const championId = this.getPlayerChampionId(game, triggerPlayer.puuid);
+    await this.voiceManager.createGameChannel(game.gameId, teamId, triggerPlayer, championId);
   }
 
   private async handleExistingGame(game: ActiveGame, player: Player): Promise<void> {
@@ -171,10 +178,11 @@ export class WatchdogEngine {
     teamPlayers.push(player);
     tracked.teamPlayers.set(teamId, teamPlayers);
 
+    const championId = this.getPlayerChampionId(game, player.puuid);
     if (!this.voiceManager.hasChannelForGame(game.gameId, teamId)) {
-      await this.voiceManager.createGameChannel(game.gameId, teamId, player);
+      await this.voiceManager.createGameChannel(game.gameId, teamId, player, championId);
     } else {
-      await this.voiceManager.notifyPlayer(player, game.gameId, teamId);
+      await this.voiceManager.notifyPlayer(player, game.gameId, teamId, championId);
     }
   }
 
@@ -183,12 +191,15 @@ export class WatchdogEngine {
     return participant?.teamId ?? 0;
   }
 
+  private getPlayerChampionId(game: ActiveGame, puuid: string): number | undefined {
+    const participant = game.participants.find((p) => p.puuid === puuid);
+    return participant?.championId;
+  }
+
   private async cleanupFinishedGames(): Promise<void> {
     const playersFromDb = getActivePlayers();
 
-    for (const [gameId, tracked] of this.activeGames) {
-      // Uma partida é considerada finalizada apenas quando NENHUM jogador associado a ela
-      // tem o seu lastGameId apontando para este gameId no banco de dados.
+    for (const [gameId] of this.activeGames) {
       const hasActivePlayersInDb = playersFromDb.some(p => p.lastGameId === String(gameId));
 
       if (!hasActivePlayersInDb) {
@@ -205,20 +216,24 @@ export class WatchdogEngine {
 
     for (const player of deactivatedCount) {
       console.log(`💤 Jogador inativado por ausência: ${player.gameName}`);
-      try {
-        const user = await this.voiceManager.client.users.fetch(player.discordId);
-        await user.send(
+      
+      const userRes = await safeAsync(this.voiceManager.client.users.fetch(player.discordId));
+      if (userRes.success) {
+        const dmRes = await safeAsync(userRes.data.send(
           `😴 **Notificação de Inatividade - VoiceLeague**\n\n` +
           `Olá! Notamos que você está ausente do League of Legends há mais de ${inactiveDays} dias.\n` +
           `Para economizar recursos, pausamos o monitoramento automático da sua conta.\n\n` +
           `✨ **Como voltar?**\n` +
           `Basta usar o comando \`/register\` novamente e você voltará a ser monitorado imediatamente!`
-        );
-      } catch {
-        console.warn(`⚠️ Não foi possível avisar o jogador ${player.gameName} sobre a inativação.`);
+        ));
+
+        if (!dmRes.success) {
+          console.warn(`⚠️ Não foi possível avisar o jogador ${player.gameName} sobre a inativação.`);
+        }
       }
     }
   }
+
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

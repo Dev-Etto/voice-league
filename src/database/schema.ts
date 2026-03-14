@@ -9,6 +9,7 @@ export const players = sqliteTable("players", {
   lastGameId: text("last_game_id"),
   isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
   lastSeenAt: text("last_seen_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  originalNickname: text("original_nickname"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

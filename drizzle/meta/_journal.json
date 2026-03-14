@@ -15,6 +15,13 @@
       "when": 1773448433222,
       "tag": "0001_add_last_seen_at",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1773458433222,
+      "tag": "0002_add_original_nickname",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { safeRun } from "./safe-run.ts";
+import { ConfigError } from "./errors.ts";
 
 const EnvSchema = z.object({
   DISCORD_TOKEN: z.string().min(1, "DISCORD_TOKEN é obrigatório"),
@@ -13,27 +15,39 @@ type Env = z.infer<typeof EnvSchema>;
 
 let cachedEnv: Env | null = null;
 
+/**
+ * Carrega e valida as variáveis de ambiente.
+ * @throws {ConfigError} Se a validação falhar.
+ */
 export function loadEnv(): Env {
   if (cachedEnv) return cachedEnv;
 
-  const result = EnvSchema.safeParse(process.env);
+  const result = safeRun(() => EnvSchema.parse(process.env));
 
   if (!result.success) {
-    const formatted = result.error.issues
-      .map((issue) => `  → ${issue.path.join(".")}: ${issue.message}`)
-      .join("\n");
+    if (result.error instanceof z.ZodError) {
+      const formatted = result.error.issues
+        .map((issue) => `  → ${issue.path.join(".")}: ${issue.message}`)
+        .join("\n");
+      throw new ConfigError(`Variáveis de ambiente inválidas:\n${formatted}`);
+    }
 
-    console.error(`\n❌ Variáveis de ambiente inválidas:\n${formatted}\n`);
-    process.exit(1);
+    throw new ConfigError(`Erro ao carregar ambiente: ${result.error.message}`);
   }
 
   cachedEnv = result.data;
-  return cachedEnv;
+  return result.data;
 }
 
+
+/**
+ * Retorna as variáveis de ambiente carregadas.
+ * Se não estiverem carregadas, tenta realizar o carregamento.
+ */
 export function getEnv(): Env {
   if (!cachedEnv) {
-    throw new Error("Env não carregada. Chame loadEnv() antes.");
+    return loadEnv();
   }
   return cachedEnv;
 }
+

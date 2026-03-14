@@ -3,17 +3,21 @@ import {
   PermissionFlagsBits,
   type Client,
   type Guild,
+  type GuildMember,
   type VoiceChannel,
 } from "discord.js";
-import type { Player } from "../database/db.ts";
+import { clearOriginalNickname, getActivePlayers, saveOriginalNickname, type Player } from "../database/db.ts";
 import { getEnv } from "../utils/env.ts";
+import { safeAsync } from "../utils/safe-async.ts";
+import { DataDragonService } from "./data-dragon.ts";
+
 
 const TEAM_LABELS: Record<number, string> = {
   100: "Azul",
   200: "Vermelho",
 };
 
-const POST_GAME_DELAY_MS = 2 * 60 * 1000;
+const POST_GAME_DELAY_MS = 30 * 1000;
 
 interface ManagedChannel {
   gameId: number;
@@ -43,40 +47,43 @@ export class VoiceChannelManager {
     const guild = await this.getGuild();
     if (!guild) return;
 
-    try {
-      const channels = await guild.channels.fetch();
-      const voiceChannels = channels.filter(
-        (c): c is VoiceChannel => 
-          c !== null && 
-          c.type === ChannelType.GuildVoice && 
-          c.name.startsWith("🔊 Time")
-      );
-
-      for (const [, channel] of voiceChannels) {
-        const match = channel.name.match(/Time (Azul|Vermelho) - (\d+)/);
-        if (!match) continue;
-
-        const [, teamLabel, gameIdStr] = match;
-        const gameId = Number(gameIdStr);
-        const teamId = teamLabel === "Azul" ? 100 : 200;
-        const channelKey = this.buildChannelKey(gameId, teamId);
-
-        if (!this.managedChannels.has(channelKey)) {
-          this.managedChannels.set(channelKey, {
-            gameId,
-            teamId,
-            channelId: channel.id,
-            inviteUrl: "Recuperado - Link indisponível",
-            createdAt: channel.createdTimestamp,
-          });
-        }
-      }
-
-      console.log(`✅ ${this.managedChannels.size} canais sincronizados.`);
-    } catch (error) {
-      console.error("Erro ao sincronizar canais:", error);
+    const channelsResult = await safeAsync(guild.channels.fetch());
+    
+    if (!channelsResult.success) {
+      console.error("Erro ao sincronizar canais:", channelsResult.error.message);
+      return;
     }
+
+    const voiceChannels = channelsResult.data.filter(
+      (c): c is VoiceChannel => 
+        c !== null && 
+        c.type === ChannelType.GuildVoice && 
+        c.name.startsWith("🔊 Time")
+    );
+
+    for (const [, channel] of voiceChannels) {
+      const match = channel.name.match(/Time (Azul|Vermelho) - (\d+)/);
+      if (!match) continue;
+
+      const [, teamLabel, gameIdStr] = match;
+      const gameId = Number(gameIdStr);
+      const teamId = teamLabel === "Azul" ? 100 : 200;
+      const channelKey = this.buildChannelKey(gameId, teamId);
+
+      if (!this.managedChannels.has(channelKey)) {
+        this.managedChannels.set(channelKey, {
+          gameId,
+          teamId,
+          channelId: channel.id,
+          inviteUrl: "Recuperado - Link indisponível",
+          createdAt: channel.createdTimestamp,
+        });
+      }
+    }
+
+    console.log(`✅ ${this.managedChannels.size} canais sincronizados.`);
   }
+
 
   /**
    * Remove canais que não têm membros e que não estão mais sendo rastreados como ativos.
@@ -88,27 +95,29 @@ export class VoiceChannelManager {
     for (const [key, managed] of this.managedChannels.entries()) {
       if (activeGameIds.has(managed.gameId)) continue;
 
-      try {
-        const channel = await guild.channels.fetch(managed.channelId).catch(() => null) as VoiceChannel | null;
-        
-        if (!channel) {
-          this.managedChannels.delete(key);
-          continue;
-        }
+      const channelResult = await safeAsync(guild.channels.fetch(managed.channelId));
+      const channel = channelResult.success ? (channelResult.data as VoiceChannel) : null;
+      
+      if (!channel) {
+        this.managedChannels.delete(key);
+        continue;
+      }
 
-        if (channel.members.size === 0) {
-          const ageMs = Date.now() - managed.createdAt;
-          if (ageMs < 30 * 1000) continue;
+      if (channel.members.size === 0) {
+        const ageMs = Date.now() - managed.createdAt;
+        if (ageMs < 30 * 1000) continue;
 
-          await channel.delete("Limpeza de canais órfãos");
+        const deleteResult = await safeAsync(channel.delete("Limpeza de canais órfãos"));
+        if (deleteResult.success) {
           this.managedChannels.delete(key);
           console.log(`🧹 Canal vazio/órfão deletado: ${channel.name}`);
+        } else {
+          console.error(`Erro ao limpar canal ${managed.channelId}:`, deleteResult.error.message);
         }
-      } catch (error) {
-        console.error(`Erro ao limpar canal ${managed.channelId}:`, error);
       }
     }
   }
+
 
   /**
    * Cria um canal de voz para uma partida e configura as permissões para os jogadores.
@@ -116,7 +125,8 @@ export class VoiceChannelManager {
   async createGameChannel(
     gameId: number,
     teamId: number,
-    triggerPlayer: Player
+    triggerPlayer: Player,
+    championId?: number
   ): Promise<ManagedChannel | null> {
     const channelKey = this.buildChannelKey(gameId, teamId);
 
@@ -127,117 +137,183 @@ export class VoiceChannelManager {
     const guild = await this.getGuild();
     if (!guild) return null;
 
-    try {
-      const teamLabel = TEAM_LABELS[teamId] ?? "Desconhecido";
-      const channelName = `🔊 Time ${teamLabel} - ${gameId}`;
+    const teamLabel = TEAM_LABELS[teamId] ?? "Desconhecido";
+    const channelName = `🔊 Time ${teamLabel} - ${gameId}`;
 
-      const existingChannel = guild.channels.cache.find(c => c.name === channelName) as VoiceChannel | undefined;
-      if (existingChannel) {
-        const managed: ManagedChannel = {
-          gameId,
-          teamId,
-          channelId: existingChannel.id,
-          inviteUrl: "Reutilizado - Link indisponível",
-          createdAt: existingChannel.createdTimestamp,
-        };
-        this.managedChannels.set(channelKey, managed);
-        return managed;
-      }
-
-      const voiceChannel = await guild.channels.create({
-        name: channelName,
-        type: ChannelType.GuildVoice,
-        permissionOverwrites: [
-          {
-            id: guild.id,
-            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
-          },
-        ],
-      });
-
-      const invite = await voiceChannel.createInvite({
-        maxAge: 3600,
-        unique: true,
-      });
-
+    const existingChannel = guild.channels.cache.find(c => c.name === channelName) as VoiceChannel | undefined;
+    if (existingChannel) {
       const managed: ManagedChannel = {
         gameId,
         teamId,
-        channelId: voiceChannel.id,
-        inviteUrl: invite.url,
-        createdAt: Date.now(),
+        channelId: existingChannel.id,
+        inviteUrl: "Reutilizado - Link indisponível",
+        createdAt: existingChannel.createdTimestamp,
       };
-
       this.managedChannels.set(channelKey, managed);
-      console.log(`🔊 Canal criado: ${channelName} | Convite: ${invite.url}`);
-
-      await this.addPlayerToGameChannel(triggerPlayer, managed);
-
       return managed;
-    } catch (error) {
-      console.error(`Erro ao criar canal para partida ${gameId}:`, error);
+    }
+
+    const channelResult = await safeAsync(guild.channels.create({
+      name: channelName,
+      type: ChannelType.GuildVoice,
+      permissionOverwrites: [
+        {
+          id: guild.id,
+          deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
+        },
+      ],
+    }));
+
+    if (!channelResult.success) {
+      console.error(`Erro ao criar canal para partida ${gameId}:`, channelResult.error.message);
       return null;
     }
+
+    const voiceChannel = channelResult.data as VoiceChannel;
+    const inviteResult = await safeAsync(voiceChannel.createInvite({
+      maxAge: 3600,
+      unique: true,
+    }));
+
+    if (!inviteResult.success) {
+      console.error(`Erro ao criar convite para canal ${voiceChannel.name}:`, inviteResult.error.message);
+      return null;
+    }
+
+    const managed: ManagedChannel = {
+      gameId,
+      teamId,
+      channelId: voiceChannel.id,
+      inviteUrl: inviteResult.data.url,
+      createdAt: Date.now(),
+    };
+
+    this.managedChannels.set(channelKey, managed);
+    console.log(`🔊 Canal criado: ${channelName} | Convite: ${inviteResult.data.url}`);
+    console.log(`⏱️ Delay de fechamento ajustado para ${POST_GAME_DELAY_MS / 1000}s para restauração rápida de nicks.`);
+
+    await this.addPlayerToGameChannel(triggerPlayer, managed, championId);
+
+    return managed;
   }
+
 
   /**
    * Adiciona um jogador a um canal de partida, configurando permissões específicas.
    * Se for o canal do time do jogador, concede acesso total (voz/chat).
    * Se for o canal do time inimigo, concede apenas visibilidade (sem conexão).
    */
-  async addPlayerToGameChannel(player: Player, managed: ManagedChannel): Promise<void> {
+  async addPlayerToGameChannel(player: Player, managed: ManagedChannel, championId?: number): Promise<void> {
     const guild = await this.getGuild();
     if (!guild) return;
 
-    try {
-      const channel = await guild.channels.fetch(managed.channelId).catch(() => null) as VoiceChannel | null;
-      if (!channel) return;
+    const channelResult = await safeAsync(guild.channels.fetch(managed.channelId));
+    const channel = channelResult.success ? (channelResult.data as VoiceChannel) : null;
+    if (!channel) return;
 
-      const member = await guild.members.fetch(player.discordId).catch(() => null);
-      if (!member) return;
-      
-      await channel.permissionOverwrites.create(member.id, {
-        ViewChannel: true,
-        Connect: true,
-        Speak: true,
-        SendMessages: true,
-        Stream: true,
-        UseEmbeddedActivities: true,
-      });
+    const memberResult = await safeAsync(guild.members.fetch(player.discordId));
+    const member = memberResult.success ? memberResult.data : null;
+    if (!member) return;
+    
+    const permResult = await safeAsync(channel.permissionOverwrites.create(member.id, {
+      ViewChannel: true,
+      Connect: true,
+      Speak: true,
+      SendMessages: true,
+      Stream: true,
+      UseEmbeddedActivities: true,
+    }));
 
-      console.log(`🔐 Permissões de TIME concedidas para ${player.gameName} no canal ${channel.name}`);
+    if (!permResult.success) {
+      console.error(`Erro ao configurar permissões para ${player.gameName}:`, permResult.error.message);
+      return;
+    }
 
-      await this.sendInviteDM(player, managed);
+    if (championId) {
+      await this.handleNicknameUpdate(member, player, championId);
+    }
 
-      const enemyTeamId = managed.teamId === 100 ? 200 : 100;
-      const enemyChannelKey = this.buildChannelKey(managed.gameId, enemyTeamId);
-      const enemyManaged = this.managedChannels.get(enemyChannelKey);
+    console.log(`🔐 Permissões de TIME concedidas para ${player.gameName} no canal ${channel.name}`);
 
-      if (enemyManaged) {
-        const enemyChannel = await guild.channels.fetch(enemyManaged.channelId).catch(() => null) as VoiceChannel | null;
-        if (enemyChannel) {
-          await enemyChannel.permissionOverwrites.create(member.id, {
-            ViewChannel: true,
-            Connect: false,
-          });
-          console.log(`👁️ Visibilidade de INIMIGO concedida para ${player.gameName} no canal ${enemyChannel.name}`);
-        }
+    await this.sendInviteDM(player, managed);
+
+    const enemyTeamId = managed.teamId === 100 ? 200 : 100;
+    const enemyChannelKey = this.buildChannelKey(managed.gameId, enemyTeamId);
+    const enemyManaged = this.managedChannels.get(enemyChannelKey);
+
+    if (enemyManaged) {
+      const enemyChannelRes = await safeAsync(guild.channels.fetch(enemyManaged.channelId));
+      const enemyChannel = enemyChannelRes.success ? (enemyChannelRes.data as VoiceChannel) : null;
+      if (enemyChannel) {
+        await safeAsync(enemyChannel.permissionOverwrites.create(member.id, {
+          ViewChannel: true,
+          Connect: false,
+        }));
+        console.log(`👁️ Visibilidade de INIMIGO concedida para ${player.gameName} no canal ${enemyChannel.name}`);
       }
-    } catch (error) {
-      console.error(`Erro ao configurar permissões para ${player.gameName}:`, error);
     }
   }
+
+
+  /**
+   * Atualiza o apelido do jogador para incluir o campeão.
+   */
+  private async handleNicknameUpdate(member: GuildMember, player: Player, championId: number): Promise<void> {
+    const championName = await DataDragonService.getInstance().getChampionName(championId);
+    const originalNick = member.nickname || member.user.username;
+    const newNickname = `${originalNick} (${championName})`.substring(0, 32);
+
+    saveOriginalNickname(player.puuid, member.nickname || null);
+
+    const nickResult = await safeAsync(member.setNickname(newNickname, "Identificação de campeão na partida"));
+    
+    if (nickResult.success) {
+      console.log(`🏷️ Nickname atualizado: ${originalNick} -> ${newNickname}`);
+    } else {
+      console.warn(`⚠️ Não foi possível alterar o nickname de ${player.gameName} (Hierarquia ou Permissão).`);
+    }
+  }
+
+
+  /**
+   * Restaura os nicknames originais de todos os jogadores da partida finalizada.
+   */
+  private async restorePlayersNicknames(gameId: number): Promise<void> {
+    const guild = await this.getGuild();
+    if (!guild) return;
+
+    const playersFromDb = getActivePlayers();
+    const gamePlayers = playersFromDb.filter(p => p.lastGameId === String(gameId));
+
+    for (const player of gamePlayers) {
+      if (player.originalNickname !== undefined) {
+        const memberRes = await safeAsync(guild.members.fetch(player.discordId));
+        const member = memberRes.success ? memberRes.data : null;
+        
+        if (member) {
+          const restoreResult = await safeAsync(member.setNickname(player.originalNickname, "Restauração pós-partida"));
+          if (restoreResult.success) {
+            console.log(`✅ Nickname restaurado para ${player.gameName}`);
+          } else {
+            console.warn(`⚠️ Falha ao restaurar nickname de ${player.gameName}`);
+          }
+        }
+        clearOriginalNickname(player.puuid);
+      }
+    }
+  }
+
 
   /**
    * Notifica um jogador sobre a partida e adiciona ele ao canal de voz.
    */
-  async notifyPlayer(player: Player, gameId: number, teamId: number): Promise<void> {
+  async notifyPlayer(player: Player, gameId: number, teamId: number, championId?: number): Promise<void> {
     const channelKey = this.buildChannelKey(gameId, teamId);
     const managed = this.managedChannels.get(channelKey);
 
     if (!managed) return;
 
-    await this.addPlayerToGameChannel(player, managed);
+    await this.addPlayerToGameChannel(player, managed, championId);
   }
 
   /**
@@ -249,9 +325,11 @@ export class VoiceChannelManager {
 
     if (channelsToDelete.length === 0) return;
 
-    console.log(`⏳ Partida ${gameId} finalizada. Deletando canais em ${POST_GAME_DELAY_MS / 1000}s...`);
+    console.log(`⏳ Partida ${gameId} finalizada. Deletando canais e restaurando nicks em ${POST_GAME_DELAY_MS / 1000}s...`);
 
     setTimeout(async () => {
+      await this.restorePlayersNicknames(gameId);
+      
       for (const [key, managed] of channelsToDelete) {
         await this.deleteChannel(managed);
         this.managedChannels.delete(key);
@@ -271,62 +349,73 @@ export class VoiceChannelManager {
    * Deleta um canal de voz.
    */
   private async deleteChannel(managed: ManagedChannel): Promise<void> {
-    try {
-      const guild = await this.getGuild();
-      if (!guild) return;
+    const guild = await this.getGuild();
+    if (!guild) return;
 
-      const channel = guild.channels.cache.get(managed.channelId) as VoiceChannel | undefined;
+    const channel = guild.channels.cache.get(managed.channelId) as VoiceChannel | undefined;
 
-      if (!channel) {
-        console.warn(`⚠️ Canal ${managed.channelId} já foi deletado ou não existe.`);
-        return;
-      }
+    if (!channel) {
+      console.warn(`⚠️ Canal ${managed.channelId} já foi deletado ou não existe.`);
+      return;
+    }
 
-      if (channel.members.size > 0) {
-        console.log(`👥 Canal ${channel.name} ainda tem ${channel.members.size} membro(s). Aguardando mais 60s...`);
-        setTimeout(() => this.deleteChannel(managed), 60_000);
-        return;
-      }
+    if (channel.members.size > 0) {
+      console.log(`👥 Canal ${channel.name} ainda tem ${channel.members.size} membro(s). Aguardando mais 60s...`);
+      setTimeout(() => this.deleteChannel(managed), 60_000);
+      return;
+    }
 
-      await channel.delete("Partida finalizada - VoiceLeague");
+    const deleteResult = await safeAsync(channel.delete("Partida finalizada - VoiceLeague"));
+    if (deleteResult.success) {
       console.log(`🗑️ Canal deletado: ${channel.name}`);
-    } catch (error) {
-      console.error(`Erro ao deletar canal ${managed.channelId}:`, error);
+    } else {
+      console.error(`Erro ao deletar canal ${managed.channelId}:`, deleteResult.error.message);
     }
   }
+
 
   /**
    * Envia um convite para o jogador.
    */
   private async sendInviteDM(player: Player, managed: ManagedChannel): Promise<void> {
-    try {
-      const user = await this.client.users.fetch(player.discordId);
-      const teamLabel = TEAM_LABELS[managed.teamId] ?? "Desconhecido";
+    const userResult = await safeAsync(this.client.users.fetch(player.discordId));
+    if (!userResult.success) {
+      console.warn(`⚠️ Não foi possível encontrar usuário ${player.discordId} para enviar DM.`);
+      return;
+    }
+    
+    const user = userResult.data;
+    const teamLabel = TEAM_LABELS[managed.teamId] ?? "Desconhecido";
 
-      await user.send(
-        `🎮 **Sua partida começou!**\n\n` +
-        `🛡️ Time **${teamLabel}** | Partida \`${managed.gameId}\`\n\n` +
-        `📋 Copie o link abaixo e envie no chat do time para chamar seus aliados:\n` +
-        `${managed.inviteUrl}`
-      );
+    const dmResult = await safeAsync(user.send(
+      `🎮 **Sua partida começou!**\n\n` +
+      `🛡️ Time **${teamLabel}** | Partida \`${managed.gameId}\`\n\n` +
+      `📋 Copie o link abaixo e envie no chat do time para chamar seus aliados:\n` +
+      `${managed.inviteUrl}`
+    ));
 
+    if (dmResult.success) {
       console.log(`📨 DM enviada para ${player.gameName} (${player.discordId})`);
-    } catch {
+    } else {
       console.warn(`⚠️ Não foi possível enviar DM para ${player.gameName}. DMs desabilitadas?`);
     }
   }
+
 
   /**
    * Busca a guild no Discord.
    */
   private async getGuild(): Promise<Guild | null> {
-    try {
-      return await this.client.guilds.fetch(getEnv().GUILD_ID);
-    } catch (error) {
-      console.error("Erro ao buscar guild:", error);
-      return null;
+    const result = await safeAsync(this.client.guilds.fetch(getEnv().GUILD_ID));
+    
+    if (result.success) {
+      return result.data;
     }
+
+    console.error("Erro ao buscar guild:", result.error.message);
+    return null;
   }
+
 
   /**
    * Constrói a chave do canal.

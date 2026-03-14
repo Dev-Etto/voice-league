@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { DatabaseError } from "../utils/errors.ts";
+import { safeRun } from "../utils/safe-run.ts";
 import { players, type Player } from "./schema.ts";
 export type { Player };
 
@@ -14,89 +15,120 @@ console.log(`📂 Utilizando banco de dados em: ${databasePath}`);
 const sqlite = new Database(databasePath);
 export const db = drizzle(sqlite);
 
+/**
+ * Executa as migrações do banco de dados.
+ */
 export const runMigrations = async (): Promise<void> => {
-  try {
-    console.log("⏳ Rodando migrations...");
-    await migrate(db, { migrationsFolder: "./drizzle" });
-    console.log("✅ Migrations concluídas!");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`❌ Erro nas migrations: ${message}`);
-    throw new DatabaseError(`Falha ao sincronizar banco: ${message}`);
+  console.log("⏳ Rodando migrations...");
+  const result = safeRun(() => migrate(db, { migrationsFolder: "./drizzle" }));
+
+
+
+  if (!result.success) {
+    console.error(`❌ Erro nas migrations: ${result.error.message}`);
+    throw new DatabaseError(`Falha ao sincronizar banco: ${result.error.message}`);
   }
+
+  console.log("✅ Migrations concluídas!");
 };
 
+/**
+ * Busca todos os jogadores ativos.
+ */
 export const getActivePlayers = (): Player[] => {
-  try {
-    return db.select().from(players).where(eq(players.isActive, true)).all();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new DatabaseError(message);
+  const result = safeRun(() => db.select().from(players).where(eq(players.isActive, true)).all());
+
+  if (!result.success) {
+    throw new DatabaseError(result.error.message);
   }
+
+  return result.data;
 };
 
+/**
+ * Busca jogadores por ID do Discord.
+ */
 export const getPlayersByDiscordId = (discordId: string): Player[] => {
-  try {
-    return db.select().from(players).where(eq(players.discordId, discordId)).all();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new DatabaseError(message);
+  const result = safeRun(() => db.select().from(players).where(eq(players.discordId, discordId)).all());
+
+  if (!result.success) {
+    throw new DatabaseError(result.error.message);
   }
+
+  return result.data;
 };
 
+/**
+ * Insere ou atualiza um jogador.
+ */
 export const upsertPlayer = (discordId: string, puuid: string, gameName: string, tagLine: string): void => {
-  try {
+  const result = safeRun(() => 
     db.insert(players)
       .values({ discordId, puuid, gameName, tagLine, isActive: true, lastSeenAt: sql`CURRENT_TIMESTAMP` })
       .onConflictDoUpdate({
         target: players.puuid,
         set: { discordId, gameName, tagLine, isActive: true, lastSeenAt: sql`CURRENT_TIMESTAMP` },
       })
-      .run();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new DatabaseError(message);
+      .run()
+  );
+
+  if (!result.success) {
+    throw new DatabaseError(result.error.message);
   }
 };
 
+/**
+ * Atualiza o timestamp de última atividade do jogador.
+ */
 export const updatePlayerActivity = (puuid: string): void => {
-  try {
+  const result = safeRun(() =>
     db.update(players)
       .set({ lastSeenAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(players.puuid, puuid))
-      .run();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new DatabaseError(message);
+      .run()
+  );
+
+  if (!result.success) {
+    throw new DatabaseError(result.error.message);
   }
 };
 
+/**
+ * Atualiza o ID da última partida rastreada.
+ */
 export const updateLastGameId = (puuid: string, gameId: string | null): void => {
-  try {
+  const result = safeRun(() =>
     db.update(players)
       .set({ lastGameId: gameId })
       .where(eq(players.puuid, puuid))
-      .run();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new DatabaseError(message);
+      .run()
+  );
+
+  if (!result.success) {
+    throw new DatabaseError(result.error.message);
   }
 };
 
+/**
+ * Remove registros de um jogador pelo ID do Discord.
+ */
 export const deletePlayersByDiscordId = (discordId: string): void => {
-  try {
+  const result = safeRun(() =>
     db.delete(players)
       .where(eq(players.discordId, discordId))
-      .run();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new DatabaseError(message);
+      .run()
+  );
+
+  if (!result.success) {
+    throw new DatabaseError(result.error.message);
   }
 };
 
+/**
+ * Inativa jogadores sem atividade recente.
+ */
 export const deactivateInactivePlayers = (days: number): Player[] => {
-  try {
-    // Busca jogadores que não são vistos há mais de X dias
+  const result = safeRun(() => {
     const inactivePlayers = db.select()
       .from(players)
       .where(sql`last_seen_at < datetime('now', '-' || ${days} || ' days') AND is_active = 1`)
@@ -110,8 +142,44 @@ export const deactivateInactivePlayers = (days: number): Player[] => {
     }
 
     return inactivePlayers;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new DatabaseError(message);
+  });
+
+  if (!result.success) {
+    throw new DatabaseError(result.error.message);
+  }
+
+  return result.data;
+};
+
+/**
+ * Salva o nickname original do membro para restauração posterior.
+ */
+export const saveOriginalNickname = (puuid: string, nickname: string | null): void => {
+  const result = safeRun(() =>
+    db.update(players)
+      .set({ originalNickname: nickname })
+      .where(eq(players.puuid, puuid))
+      .run()
+  );
+
+  if (!result.success) {
+    throw new DatabaseError(result.error.message);
   }
 };
+
+/**
+ * Limpa o registro do nickname original.
+ */
+export const clearOriginalNickname = (puuid: string): void => {
+  const result = safeRun(() =>
+    db.update(players)
+      .set({ originalNickname: null })
+      .where(eq(players.puuid, puuid))
+      .run()
+  );
+
+  if (!result.success) {
+    throw new DatabaseError(result.error.message);
+  }
+};
+

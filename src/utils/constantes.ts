@@ -1,0 +1,1 @@
+export const CACHE_TTL_24H = 24 * 60 * 60 * 1000;
