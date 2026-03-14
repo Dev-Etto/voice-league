@@ -94,12 +94,14 @@ export class VoiceChannelManager {
         }
 
         if (channel.members.size === 0) {
+          // Se o canal está vazio e não está no tracking ativo, deletamos.
+          // Mantemos uma pequena carência de 30s apenas para canais sincronizados AGORA
           const ageMs = Date.now() - managed.createdAt;
-          if (ageMs < 2 * 60 * 1000) continue;
+          if (ageMs < 30 * 1000) continue;
 
           await channel.delete("Limpeza de canais órfãos");
           this.managedChannels.delete(key);
-          console.log(`🧹 Canal órfão deletado: ${channel.name}`);
+          console.log(`🧹 Canal vazio/órfão deletado: ${channel.name}`);
         }
       } catch (error) {
         console.error(`Erro ao limpar canal ${managed.channelId}:`, error);

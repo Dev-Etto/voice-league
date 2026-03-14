@@ -49,8 +49,7 @@ export class WatchdogEngine {
 
     try {
       const playersList = getActivePlayers();
-      if (playersList.length === 0) return;
-
+      
       const guildId = getEnv().GUILD_ID;
       const guild = await this.voiceManager.client.guilds.fetch(guildId).catch(() => null);
       
@@ -62,8 +61,9 @@ export class WatchdogEngine {
       console.log(`🔍 Verificando players ativos...`);
       this.checkedPuuids.clear();
 
-      for (const player of playersList) {
-        if (this.checkedPuuids.has(player.puuid)) continue;
+      if (playersList.length > 0) {
+        for (const player of playersList) {
+          if (this.checkedPuuids.has(player.puuid)) continue;
 
         const member = await guild.members.fetch(player.discordId).catch(() => null);
         const isPlayingLoL = member?.presence?.activities.some(
@@ -93,6 +93,7 @@ export class WatchdogEngine {
         }
 
         await this.sleep(1200);
+        }
       }
 
       await this.cleanupFinishedGames();
