@@ -199,16 +199,20 @@ export class WatchdogEngine {
   private async cleanupFinishedGames(): Promise<void> {
     const playersFromDb = getActivePlayers();
 
-    for (const [gameId] of this.activeGames) {
+    for (const [gameId, tracked] of this.activeGames.entries()) {
       const hasActivePlayersInDb = playersFromDb.some(p => p.lastGameId === String(gameId));
 
       if (!hasActivePlayersInDb) {
         this.activeGames.delete(gameId);
-        await this.voiceManager.scheduleChannelDeletion(gameId);
+        
+        const playersToRestore = Array.from(tracked.teamPlayers.values()).flat();
+        await this.voiceManager.scheduleChannelDeletion(gameId, playersToRestore);
+        
         console.log(`🧹 Partida ${gameId} removida do tracking.`);
       }
     }
   }
+
 
   private async processInactivityCleanup(): Promise<void> {
     const inactiveDays = getEnv().INACTIVITY_DAYS;

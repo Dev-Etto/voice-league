@@ -59,8 +59,22 @@ export const getPlayersByDiscordId = (discordId: string): Player[] => {
 };
 
 /**
+ * Busca um jogador pelo PUUID.
+ */
+export const getPlayerByPuuid = (puuid: string): Player | null => {
+  const result = safeRun(() => db.select().from(players).where(eq(players.puuid, puuid)).get());
+
+  if (!result.success) {
+    throw new DatabaseError(result.error.message);
+  }
+
+  return result.data || null;
+};
+
+/**
  * Insere ou atualiza um jogador.
  */
+
 export const upsertPlayer = (discordId: string, puuid: string, gameName: string, tagLine: string): void => {
   const result = safeRun(() => 
     db.insert(players)
@@ -158,9 +172,10 @@ export const saveOriginalNickname = (puuid: string, nickname: string | null): vo
   const result = safeRun(() =>
     db.update(players)
       .set({ originalNickname: nickname })
-      .where(eq(players.puuid, puuid))
+      .where(sql`${players.puuid} = ${puuid} AND ${players.originalNickname} IS NULL`)
       .run()
   );
+
 
   if (!result.success) {
     throw new DatabaseError(result.error.message);

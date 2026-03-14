@@ -6,7 +6,14 @@ import {
   type GuildMember,
   type VoiceChannel,
 } from "discord.js";
-import { clearOriginalNickname, getActivePlayers, saveOriginalNickname, type Player } from "../database/db.ts";
+import {
+  clearOriginalNickname,
+  getActivePlayers,
+  getPlayerByPuuid,
+  saveOriginalNickname,
+  type Player,
+} from "../database/db.ts";
+
 import { getEnv } from "../utils/env.ts";
 import { safeAsync } from "../utils/safe-async.ts";
 import { DataDragonService } from "./data-dragon.ts";
@@ -263,7 +270,8 @@ export class VoiceChannelManager {
     const originalNick = member.nickname || member.user.username;
     const newNickname = `${originalNick} (${championName})`.substring(0, 32);
 
-    saveOriginalNickname(player.puuid, member.nickname || null);
+    // Salva o nickname atual. Se for null (usa username), salva um marcador especial
+    saveOriginalNickname(player.puuid, member.nickname || "@@USERNAME@@");
 
     const nickResult = await safeAsync(member.setNickname(newNickname, "Identificação de campeão na partida"));
     
@@ -275,23 +283,32 @@ export class VoiceChannelManager {
   }
 
 
+
   /**
    * Restaura os nicknames originais de todos os jogadores da partida finalizada.
    */
-  private async restorePlayersNicknames(gameId: number): Promise<void> {
+  /**
+   * Restaura os nicknames originais de todos os jogadores da partida finalizada.
+   */
+  private async restorePlayersNicknames(playersSnapshots: Player[]): Promise<void> {
     const guild = await this.getGuild();
     if (!guild) return;
 
-    const playersFromDb = getActivePlayers();
-    const gamePlayers = playersFromDb.filter(p => p.lastGameId === String(gameId));
+    for (const snapshot of playersSnapshots) {
+      // Busca o estado mais recente do jogador para ter o originalNickname atualizado
+      const player = getPlayerByPuuid(snapshot.puuid);
+      if (!player) continue;
 
-    for (const player of gamePlayers) {
-      if (player.originalNickname !== undefined) {
+      if (player.originalNickname !== undefined && player.originalNickname !== null) {
+
         const memberRes = await safeAsync(guild.members.fetch(player.discordId));
         const member = memberRes.success ? memberRes.data : null;
         
         if (member) {
-          const restoreResult = await safeAsync(member.setNickname(player.originalNickname, "Restauração pós-partida"));
+          // Se o marcador especial for encontrado, restaura para null (username)
+          const nickToRestore = player.originalNickname === "@@USERNAME@@" ? null : player.originalNickname;
+          
+          const restoreResult = await safeAsync(member.setNickname(nickToRestore, "Restauração pós-partida"));
           if (restoreResult.success) {
             console.log(`✅ Nickname restaurado para ${player.gameName}`);
           } else {
@@ -307,6 +324,7 @@ export class VoiceChannelManager {
   /**
    * Notifica um jogador sobre a partida e adiciona ele ao canal de voz.
    */
+
   async notifyPlayer(player: Player, gameId: number, teamId: number, championId?: number): Promise<void> {
     const channelKey = this.buildChannelKey(gameId, teamId);
     const managed = this.managedChannels.get(channelKey);
@@ -319,7 +337,10 @@ export class VoiceChannelManager {
   /**
    * Agenda a deleção dos canais de uma partida após um delay de 5 minutos.
    */
-  async scheduleChannelDeletion(gameId: number): Promise<void> {
+  /**
+   * Agenda a deleção dos canais de uma partida após um delay.
+   */
+  async scheduleChannelDeletion(gameId: number, playersToRestore: Player[]): Promise<void> {
     const channelsToDelete = [...this.managedChannels.entries()]
       .filter(([, managed]) => managed.gameId === gameId);
 
@@ -328,7 +349,7 @@ export class VoiceChannelManager {
     console.log(`⏳ Partida ${gameId} finalizada. Deletando canais e restaurando nicks em ${POST_GAME_DELAY_MS / 1000}s...`);
 
     setTimeout(async () => {
-      await this.restorePlayersNicknames(gameId);
+      await this.restorePlayersNicknames(playersToRestore);
       
       for (const [key, managed] of channelsToDelete) {
         await this.deleteChannel(managed);
@@ -336,6 +357,7 @@ export class VoiceChannelManager {
       }
     }, POST_GAME_DELAY_MS);
   }
+
 
 
   /**
