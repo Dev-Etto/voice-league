@@ -95,7 +95,7 @@ export class VoiceChannelManager {
 
         if (channel.members.size === 0) {
           const ageMs = Date.now() - managed.createdAt;
-          if (ageMs < 5 * 60 * 1000) continue;
+          if (ageMs < 2 * 60 * 1000) continue;
 
           await channel.delete("Limpeza de canais órfãos");
           this.managedChannels.delete(key);
