@@ -125,7 +125,6 @@ export class VoiceChannelManager {
       const teamLabel = TEAM_LABELS[teamId] ?? "Desconhecido";
       const channelName = `🔊 Time ${teamLabel} - ${gameId}`;
 
-      // Segurança: Verifica se já existe um canal com esse nome no Discord
       const existingChannel = guild.channels.cache.find(c => c.name === channelName) as VoiceChannel | undefined;
       if (existingChannel) {
         const managed: ManagedChannel = {
