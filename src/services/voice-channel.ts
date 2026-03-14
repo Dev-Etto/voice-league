@@ -8,10 +8,9 @@ import {
 } from "discord.js";
 import {
   clearOriginalNickname,
-  getActivePlayers,
   getPlayerByPuuid,
   saveOriginalNickname,
-  type Player,
+  type Player
 } from "../database/db.ts";
 
 import { getEnv } from "../utils/env.ts";
@@ -270,7 +269,6 @@ export class VoiceChannelManager {
     const originalNick = member.nickname || member.user.username;
     const newNickname = `${originalNick} (${championName})`.substring(0, 32);
 
-    // Salva o nickname atual. Se for null (usa username), salva um marcador especial
     saveOriginalNickname(player.puuid, member.nickname || "@@USERNAME@@");
 
     const nickResult = await safeAsync(member.setNickname(newNickname, "Identificação de campeão na partida"));
@@ -283,10 +281,6 @@ export class VoiceChannelManager {
   }
 
 
-
-  /**
-   * Restaura os nicknames originais de todos os jogadores da partida finalizada.
-   */
   /**
    * Restaura os nicknames originais de todos os jogadores da partida finalizada.
    */
@@ -295,7 +289,6 @@ export class VoiceChannelManager {
     if (!guild) return;
 
     for (const snapshot of playersSnapshots) {
-      // Busca o estado mais recente do jogador para ter o originalNickname atualizado
       const player = getPlayerByPuuid(snapshot.puuid);
       if (!player) continue;
 
@@ -305,7 +298,6 @@ export class VoiceChannelManager {
         const member = memberRes.success ? memberRes.data : null;
         
         if (member) {
-          // Se o marcador especial for encontrado, restaura para null (username)
           const nickToRestore = player.originalNickname === "@@USERNAME@@" ? null : player.originalNickname;
           
           const restoreResult = await safeAsync(member.setNickname(nickToRestore, "Restauração pós-partida"));
@@ -334,9 +326,6 @@ export class VoiceChannelManager {
     await this.addPlayerToGameChannel(player, managed, championId);
   }
 
-  /**
-   * Agenda a deleção dos canais de uma partida após um delay de 5 minutos.
-   */
   /**
    * Agenda a deleção dos canais de uma partida após um delay.
    */
