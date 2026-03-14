@@ -5,6 +5,6 @@ export default defineConfig({
   out: "./drizzle",
   dialect: "sqlite",
   dbCredentials: {
-    url: "VoiceLeague.sqlite",
+    url: process.env.DATABASE_PATH || "VoiceLeague.sqlite",
   },
 });

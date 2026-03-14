@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
+import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { DatabaseError } from "../utils/errors.ts";
 import { players, type Player } from "./schema.ts";
 export type { Player };
@@ -13,6 +14,17 @@ console.log(`📂 Utilizando banco de dados em: ${databasePath}`);
 const sqlite = new Database(databasePath);
 export const db = drizzle(sqlite);
 
+export const runMigrations = async (): Promise<void> => {
+  try {
+    console.log("⏳ Rodando migrations...");
+    await migrate(db, { migrationsFolder: "./drizzle" });
+    console.log("✅ Migrations concluídas!");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Erro nas migrations: ${message}`);
+    throw new DatabaseError(`Falha ao sincronizar banco: ${message}`);
+  }
+};
 
 export const getActivePlayers = (): Player[] => {
   try {

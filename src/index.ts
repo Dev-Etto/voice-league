@@ -6,10 +6,12 @@ import { unregisterCommand } from "./commands/unregister.ts";
 import { WatchdogEngine } from "./engine/watchdog.ts";
 import { loadEnv } from "./utils/env.ts";
 import { setupGlobalErrorHandlers } from "./utils/error-handler.ts";
+import { runMigrations } from "./database/db.ts";
 
 config();
 
 setupGlobalErrorHandlers();
+await runMigrations();
 
 const env = loadEnv();
 
