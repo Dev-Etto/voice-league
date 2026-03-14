@@ -117,5 +117,5 @@ Este projeto prioriza a qualidade técnica e segue rigorosamente:
 ---
 
 <div align="center">
-Desenvolvido com ❤️ por <a href="https://github.com/Dev-Etto">Dev-Etto</a>
+Desenvolvido por <a href="https://github.com/Dev-Etto">Dev-Etto</a>
 </div>
