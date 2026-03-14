@@ -1,12 +1,17 @@
-FROM oven/bun:1.1 AS base
+FROM oven/bun:latest AS base
 WORKDIR /app
 
-# Instala dependências do sistema necessárias para o SQLite no Linux
-RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
+# Instala dependências do sistema necessárias para o SQLite e compilação de módulos nativos
+RUN apt-get update && apt-get install -y \
+    sqlite3 \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 # Instala as dependências do projeto
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Copia o código fonte
 COPY . .
