@@ -3,7 +3,6 @@ import { config } from "dotenv";
 import { registerCommand } from "./commands/register.ts";
 import { statusCommand } from "./commands/status.ts";
 import { unregisterCommand } from "./commands/unregister.ts";
-import { initDb } from "./database/db.ts";
 import { WatchdogEngine } from "./engine/watchdog.ts";
 import { loadEnv } from "./utils/env.ts";
 import { setupGlobalErrorHandlers } from "./utils/error-handler.ts";
@@ -51,7 +50,6 @@ async function deployCommands() {
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`🛡️ VoiceLeague online como ${readyClient.user.tag}`);
-  initDb();
   await deployCommands();
 
   const watchdog = new WatchdogEngine(readyClient);

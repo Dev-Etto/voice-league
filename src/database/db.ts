@@ -13,25 +13,6 @@ console.log(`📂 Utilizando banco de dados em: ${databasePath}`);
 const sqlite = new Database(databasePath);
 export const db = drizzle(sqlite);
 
-export const initDb = () => {
-  try {
-    sqlite.run(`
-      CREATE TABLE IF NOT EXISTS players (
-        discord_id TEXT NOT NULL,
-        puuid TEXT PRIMARY KEY,
-        game_name TEXT NOT NULL,
-        tag_line TEXT NOT NULL,
-        last_game_id TEXT,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(discord_id, puuid)
-      )
-    `);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new DatabaseError(message);
-  }
-};
 
 export const getActivePlayers = (): Player[] => {
   try {

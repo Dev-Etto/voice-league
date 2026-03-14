@@ -91,7 +91,6 @@ export class WatchdogEngine {
 
     await this.cleanupFinishedGames(playersList);
 
-    // Limpeza profunda de canais órfãos a cada ciclo de poll
     const activeGameIds = new Set(this.activeGames.keys());
     await this.voiceManager.pruneEmptyChannels(activeGameIds);
   }
