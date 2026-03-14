@@ -1,0 +1,14 @@
+services:
+  bot:
+    build: .
+    container_name: voiceleague-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DATABASE_PATH=/app/data/VoiceLeague.sqlite
+    volumes:
+      - ./data:/app/data # Mapeia a pasta local /data para dentro do container
+    user: "1000:1000" # Ajuste se precisar conforme permissoes do sistema (opcional)
+
+volumes:
+  data:

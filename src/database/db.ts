@@ -5,7 +5,11 @@ import { DatabaseError } from "../utils/errors.ts";
 import { players, type Player } from "./schema.ts";
 export type { Player };
 
-const databasePath = process.env.DATABASE_PATH || "VoiceLeague.sqlite";
+import path from "node:path";
+
+const databasePath = process.env.DATABASE_PATH || path.join(process.cwd(), "VoiceLeague.sqlite");
+console.log(`📂 Utilizando banco de dados em: ${databasePath}`);
+
 const sqlite = new Database(databasePath);
 export const db = drizzle(sqlite);
 

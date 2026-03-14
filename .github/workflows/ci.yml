@@ -1,0 +1,31 @@
+name: 🛡️ CI - VoiceLeague
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run Tests
+        # Definimos variávis de teste para evitar erros de inicialização da Riot API/Discord
+        env:
+          DISCORD_TOKEN: "test_token"
+          CLIENT_ID: "123456"
+          GUILD_ID: "7890"
+          RIOT_API_KEY: "RGAPI-test"
+        run: bun test

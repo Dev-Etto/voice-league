@@ -1,23 +1,23 @@
-# Use a imagem oficial do Bun
-FROM oven/bun:latest
-
-# Define o diretório de trabalho
+FROM oven/bun:1.1 AS base
 WORKDIR /app
 
-# Copia os arquivos de dependências
-COPY package.json bun.lockb* ./
+# Instala dependências do sistema necessárias para o SQLite no Linux
+RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
 
-# Instala as dependências
-RUN bun install --production
+# Instala as dependências do projeto
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
-# Copia o restante do código
+# Copia o código fonte
 COPY . .
 
-# Expõe a porta (embora o bot não precise, algumas plataformas exigem)
+# Garante permissões de escrita para o banco de dados
+RUN mkdir -p /app/data && chown -R bun:bun /app
+
+# Variável de ambiente padrão para o banco (pode ser sobrescrita)
+ENV DATABASE_PATH=/app/data/VoiceLeague.sqlite
+
+USER bun
 EXPOSE 3000
 
-# Variáveis de ambiente padrão para o Railway Volume
-ENV DATABASE_PATH=/data/VoiceLeague.sqlite
-
-# Comando para iniciar o bot
 CMD ["bun", "run", "start"]
