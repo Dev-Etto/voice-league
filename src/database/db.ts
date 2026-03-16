@@ -9,11 +9,20 @@ export type { Player };
 
 import path from "node:path";
 
-const databasePath = process.env.DATABASE_PATH || path.join(process.cwd(), "VoiceLeague.sqlite");
-console.log(`📂 Utilizando banco de dados em: ${databasePath}`);
+const getDatabasePath = () => process.env.DATABASE_PATH || path.join(process.cwd(), "VoiceLeague.sqlite");
 
-const sqlite = new Database(databasePath);
-export const db = drizzle(sqlite);
+let sqlite = new Database(getDatabasePath());
+export let db = drizzle(sqlite);
+
+/**
+ * Reinicializa a conexão com o banco (útil para testes).
+ */
+export const resetDatabase = (newPath?: string): void => {
+  const path = newPath || getDatabasePath();
+  sqlite.close();
+  sqlite = new Database(path);
+  db = drizzle(sqlite);
+};
 
 /**
  * Executa as migrações do banco de dados.

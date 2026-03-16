@@ -1,11 +1,16 @@
-import type { Client } from "discord.js";
-import { getActivePlayers, updateLastGameId, updatePlayerActivity, deactivateInactivePlayers, type Player } from "../database/db.ts";
+import type { Client, Guild, GuildMember } from "discord.js";
+import { 
+  getActivePlayers, 
+  updateLastGameId, 
+  updatePlayerActivity, 
+  deactivateInactivePlayers, 
+  type Player 
+} from "../database/db.ts";
 import { getActiveGameByPuuid, type ActiveGame } from "../services/riot.ts";
 import { VoiceChannelManager } from "../services/voice-channel.ts";
 import { getEnv } from "../utils/env.ts";
 import { RateLimitError, RiotApiError } from "../utils/errors.ts";
 import { safeAsync } from "../utils/safe-async.ts";
-
 
 interface TrackedGame {
   gameId: number;
@@ -18,25 +23,31 @@ export class WatchdogEngine {
   private readonly pollingIntervalMs: number;
   private readonly activeGames = new Map<number, TrackedGame>();
   private readonly checkedPuuids = new Set<string>();
-  private intervalId: ReturnType<typeof setInterval> | null = null;
+  private intervalId: Timer | null = null;
   private isPolling = false;
 
-  constructor(client: Client) {
-    this.voiceManager = new VoiceChannelManager(client);
-    this.pollingIntervalMs = getEnv().POLLING_INTERVAL_MS;
+  constructor(
+    client: Client, 
+    voiceManager?: VoiceChannelManager,
+    pollingIntervalMs?: number
+  ) {
+    this.voiceManager = voiceManager ?? new VoiceChannelManager(client);
+    this.pollingIntervalMs = pollingIntervalMs ?? getEnv().POLLING_INTERVAL_MS;
   }
 
-  async start(): Promise<void> {
+  public async start(): Promise<void> {
     if (this.intervalId) return;
 
     await this.voiceManager.initializeFromGuild();
 
     console.log(`🐕 Watchdog iniciado (polling a cada ${this.pollingIntervalMs / 1000}s)`);
-    this.poll();
-    this.intervalId = setInterval(() => this.poll(), this.pollingIntervalMs);
+    
+    // Execução imediata seguida de intervalo
+    void this.poll();
+    this.intervalId = setInterval(() => void this.poll(), this.pollingIntervalMs);
   }
 
-  stop(): void {
+  public stop(): void {
     if (!this.intervalId) return;
 
     clearInterval(this.intervalId);
@@ -47,10 +58,12 @@ export class WatchdogEngine {
 
   private async poll(): Promise<void> {
     if (this.isPolling) return;
+    
     this.isPolling = true;
+    this.checkedPuuids.clear();
 
     const guildId = getEnv().GUILD_ID;
-    const guildResult = await safeAsync(this.voiceManager.client.guilds.fetch(guildId));
+    const guildResult = await safeAsync<Guild>(this.voiceManager.client.guilds.fetch(guildId));
     
     if (!guildResult.success) {
       console.error("❌ Erro ao buscar guild:", guildResult.error.message);
@@ -58,64 +71,65 @@ export class WatchdogEngine {
       return;
     }
 
-    const guild = guildResult.data;
-    console.log(`🔍 Verificando players ativos...`);
-    this.checkedPuuids.clear();
-
     const playersList = getActivePlayers();
+    const guild = guildResult.data;
 
     for (const player of playersList) {
-      if (this.checkedPuuids.has(player.puuid)) continue;
-
-      const memberResult = await safeAsync(guild.members.fetch(player.discordId));
-      const member = memberResult.success ? memberResult.data : null;
-
-      const isPlayingLoL = member?.presence?.activities.some(
-        act => act.name.toLowerCase().includes("league of legends")
-      );
-
-      if (isPlayingLoL || member?.presence?.status === "online" || member?.presence?.status === "dnd") {
-        updatePlayerActivity(player.puuid);
-      }
-
-      if (!isPlayingLoL && !player.lastGameId) {
-        continue;
-      }
-
-      const checkResult = await safeAsync(this.checkPlayer(player, playersList));
-      
-      if (!checkResult.success) {
-        const { error } = checkResult;
-        
-        if (error instanceof RateLimitError) {
-          console.warn(`⏳ Rate limit atingido. Pausando poll por ${error.retryAfterSeconds}s.`);
-          await this.sleep(error.retryAfterSeconds * 1000);
-          this.isPolling = false;
-          return;
-        }
-        
-        if (error instanceof RiotApiError && error.riotStatusCode === 401) {
-          console.error(`🛑 ERRO CRÍTICO: ${error.message}`);
-          this.stop();
-          this.isPolling = false;
-          return;
-        }
-
-        console.error(`Erro ao verificar jogador ${player.gameName}:`, error.message);
-      }
-
-      await this.sleep(1200);
+      await this.processPlayerPoll(player, guild, playersList);
     }
 
     await this.cleanupFinishedGames();
-
+    
     const activeGameIds = new Set(this.activeGames.keys());
     await this.voiceManager.pruneEmptyChannels(activeGameIds);
-
     await this.processInactivityCleanup();
+
     this.isPolling = false;
   }
 
+  private async processPlayerPoll(player: Player, guild: Guild, allPlayers: Player[]): Promise<void> {
+    if (this.checkedPuuids.has(player.puuid)) return;
+
+    const memberResult = await safeAsync<GuildMember>(guild.members.fetch(player.discordId));
+    if (!memberResult.success) return;
+
+    const member = memberResult.data;
+    const isPlayingLoL = member.presence?.activities.some(
+      act => act.name.toLowerCase().includes("league of legends")
+    );
+
+    const isOnline = member.presence?.status === "online" || member.presence?.status === "dnd";
+
+    if (isPlayingLoL || isOnline) {
+      updatePlayerActivity(player.puuid);
+    }
+
+    if (!isPlayingLoL && !player.lastGameId) return;
+
+    const checkResult = await safeAsync(this.checkPlayer(player, allPlayers));
+    
+    if (!checkResult.success) {
+      this.handlePollError(checkResult.error, player);
+    }
+
+    await this.sleep(1200);
+  }
+
+  private handlePollError(error: Error, player: Player): void {
+    if (error instanceof RateLimitError) {
+      console.warn(`⏳ Rate limit atingido. Aguardando ${error.retryAfterSeconds}s.`);
+      // Nota: O sleep aqui travaria o loop do poll atual, o que é desejado para respeitar a API
+      return;
+    }
+    
+    if (error instanceof RiotApiError && error.riotStatusCode === 401) {
+      console.error(`🛑 ERRO CRÍTICO (Token expirado/inválido): ${error.message}`);
+      this.stop();
+      return;
+    }
+
+    console.error(`Erro ao verificar jogador ${player.gameName}:`, error.message);
+  }
 
   private async checkPlayer(player: Player, allPlayers: Player[]): Promise<void> {
     const game = await getActiveGameByPuuid(player.puuid);
@@ -139,107 +153,94 @@ export class WatchdogEngine {
   }
 
   private async processPlayerInGame(game: ActiveGame, player: Player): Promise<void> {
-    const isAlreadyTracked = this.activeGames.has(game.gameId);
+    const tracked = this.activeGames.get(game.gameId);
+    const teamId = this.getPlayerTeam(game, player.puuid);
+    const championId = this.getPlayerChampionId(game, player.puuid);
 
-    if (isAlreadyTracked) {
-      await this.handleExistingGame(game, player);
+    if (!tracked) {
+      await this.handleNewGame(game, player, teamId, championId);
       return;
     }
 
-    await this.handleNewGame(game, player);
+    await this.handleExistingGame(tracked, game, player, teamId, championId);
   }
 
-  private async handleNewGame(game: ActiveGame, triggerPlayer: Player): Promise<void> {
-    const teamId = this.getPlayerTeam(game, triggerPlayer.puuid);
-
+  private async handleNewGame(game: ActiveGame, player: Player, teamId: number, championId?: number): Promise<void> {
     const trackedGame: TrackedGame = {
       gameId: game.gameId,
-      teamPlayers: new Map([[teamId, [triggerPlayer]]]),
+      teamPlayers: new Map([[teamId, [player]]]),
       detectedAt: Date.now(),
     };
 
     this.activeGames.set(game.gameId, trackedGame);
-    console.log(`🎮 Nova partida detectada: ${game.gameId} | Jogador: ${triggerPlayer.gameName}`);
+    console.log(`🎮 Nova partida detectada: ${game.gameId} | Jogador: ${player.gameName}`);
 
-    const championId = this.getPlayerChampionId(game, triggerPlayer.puuid);
-    await this.voiceManager.createGameChannel(game.gameId, teamId, triggerPlayer, championId);
+    await this.voiceManager.createGameChannel(game.gameId, teamId, player, championId);
   }
 
-  private async handleExistingGame(game: ActiveGame, player: Player): Promise<void> {
-    const tracked = this.activeGames.get(game.gameId);
-    if (!tracked) return;
-
-    const teamId = this.getPlayerTeam(game, player.puuid);
+  private async handleExistingGame(tracked: TrackedGame, game: ActiveGame, player: Player, teamId: number, championId?: number): Promise<void> {
     const teamPlayers = tracked.teamPlayers.get(teamId) ?? [];
 
-    const isAlreadyInTeam = teamPlayers.some((p) => p.puuid === player.puuid);
-    if (isAlreadyInTeam) return;
+    if (teamPlayers.some(p => p.puuid === player.puuid)) return;
 
     teamPlayers.push(player);
     tracked.teamPlayers.set(teamId, teamPlayers);
 
-    const championId = this.getPlayerChampionId(game, player.puuid);
     if (!this.voiceManager.hasChannelForGame(game.gameId, teamId)) {
       await this.voiceManager.createGameChannel(game.gameId, teamId, player, championId);
-    } else {
-      await this.voiceManager.notifyPlayer(player, game.gameId, teamId, championId);
+      return;
     }
+
+    await this.voiceManager.notifyPlayer(player, game.gameId, teamId, championId);
   }
 
   private getPlayerTeam(game: ActiveGame, puuid: string): number {
-    const participant = game.participants.find((p) => p.puuid === puuid);
-    return participant?.teamId ?? 0;
+    return game.participants.find(p => p.puuid === puuid)?.teamId ?? 0;
   }
 
   private getPlayerChampionId(game: ActiveGame, puuid: string): number | undefined {
-    const participant = game.participants.find((p) => p.puuid === puuid);
-    return participant?.championId;
+    return game.participants.find(p => p.puuid === puuid)?.championId;
   }
 
   private async cleanupFinishedGames(): Promise<void> {
     const playersFromDb = getActivePlayers();
 
     for (const [gameId, tracked] of this.activeGames.entries()) {
-      const hasActivePlayersInDb = playersFromDb.some(p => p.lastGameId === String(gameId));
+      const stillInGame = playersFromDb.some(p => p.lastGameId === String(gameId));
+      if (stillInGame) continue;
 
-      if (!hasActivePlayersInDb) {
-        this.activeGames.delete(gameId);
-        
-        const playersToRestore = Array.from(tracked.teamPlayers.values()).flat();
-        await this.voiceManager.scheduleChannelDeletion(gameId, playersToRestore);
-        
-        console.log(`🧹 Partida ${gameId} removida do tracking.`);
-      }
+      this.activeGames.delete(gameId);
+      const playersToRestore = Array.from(tracked.teamPlayers.values()).flat();
+      await this.voiceManager.scheduleChannelDeletion(gameId, playersToRestore);
+      
+      console.log(`🧹 Partida ${gameId} removida do tracking.`);
     }
   }
-
 
   private async processInactivityCleanup(): Promise<void> {
     const inactiveDays = getEnv().INACTIVITY_DAYS;
-    const deactivatedCount = deactivateInactivePlayers(inactiveDays);
+    const deactivatedPlayers = deactivateInactivePlayers(inactiveDays);
 
-    for (const player of deactivatedCount) {
-      console.log(`💤 Jogador inativado por ausência: ${player.gameName}`);
-      
-      const userRes = await safeAsync(this.voiceManager.client.users.fetch(player.discordId));
-      if (userRes.success) {
-        const dmRes = await safeAsync(userRes.data.send(
-          `😴 **Notificação de Inatividade - VoiceLeague**\n\n` +
-          `Olá! Notamos que você está ausente do League of Legends há mais de ${inactiveDays} dias.\n` +
-          `Para economizar recursos, pausamos o monitoramento automático da sua conta.\n\n` +
-          `✨ **Como voltar?**\n` +
-          `Basta usar o comando \`/register\` novamente e você voltará a ser monitorado imediatamente!`
-        ));
-
-        if (!dmRes.success) {
-          console.warn(`⚠️ Não foi possível avisar o jogador ${player.gameName} sobre a inativação.`);
-        }
-      }
+    for (const player of deactivatedPlayers) {
+      await this.notifyInactivity(player, inactiveDays);
     }
   }
 
+  private async notifyInactivity(player: Player, days: number): Promise<void> {
+    console.log(`💤 Jogador inativado por ausência: ${player.gameName}`);
+    
+    const userRes = await safeAsync(this.voiceManager.client.users.fetch(player.discordId));
+    if (!userRes.success) return;
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    await safeAsync(userRes.data.send(
+      `😴 **Notificação de Inatividade - VoiceLeague**\n\n` +
+      `Olá! Notamos que você está ausente do League of Legends há mais de ${days} dias.\n` +
+      `Pausamos o monitoramento automático da sua conta.\n\n` +
+      `✨ **Como voltar?** Basta usar \`/register\` novamente!`
+    ));
+  }
+
+  protected sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
