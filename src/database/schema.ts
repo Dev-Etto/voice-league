@@ -10,6 +10,7 @@ export const players = sqliteTable("players", {
   isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
   lastSeenAt: text("last_seen_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   originalNickname: text("original_nickname"),
+  autoJoin: integer("auto_join", { mode: "boolean" }).default(false).notNull(),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

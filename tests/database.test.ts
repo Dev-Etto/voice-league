@@ -90,4 +90,18 @@ describe("Database (Drizzle)", () => {
     const remaining = db.select().from(players).where(eq(players.puuid, "puuid-abc")).all();
     expect(remaining.length).toBe(0);
   });
+
+  it("deve atualizar a preferência de auto-join", () => {
+    db.insert(players)
+      .values({ discordId: "123", puuid: "puuid-aj", gameName: "AJPlayer", tagLine: "BR1" })
+      .run();
+
+    db.update(players)
+      .set({ autoJoin: true })
+      .where(eq(players.discordId, "123"))
+      .run();
+
+    const result = db.select().from(players).where(eq(players.puuid, "puuid-aj")).all();
+    expect(result[0].autoJoin).toBe(true);
+  });
 });

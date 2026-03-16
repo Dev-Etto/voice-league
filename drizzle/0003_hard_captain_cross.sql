@@ -1,0 +1,1 @@
+ALTER TABLE `players` ADD `auto_join` integer DEFAULT false NOT NULL;

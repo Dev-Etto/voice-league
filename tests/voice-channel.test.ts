@@ -74,6 +74,27 @@ describe("VoiceChannelManager", () => {
       expect(mockNicknameService.updateWithChampion).toHaveBeenCalled();
       expect(mockNotificationService.sendGameInvite).toHaveBeenCalled();
     });
+
+    it("deve mover o membro se o auto-join estiver ativado", async () => {
+      const mockChannel = createMockVoiceChannel("Name", "v1");
+      mockGuild.channels.fetch.mockResolvedValue(mockChannel);
+      
+      const mockMember = { 
+        id: "d1",
+        voice: {
+          channelId: "other-channel",
+          setChannel: mock(() => Promise.resolve())
+        }
+      };
+      mockGuild.members.fetch.mockResolvedValue(mockMember);
+
+      const player = { discordId: "d1", puuid: "p1", gameName: "P1", autoJoin: true } as any;
+      const managed = { gameId: 1, teamId: 100, channelId: "v1", inviteUrl: "url", createdAt: Date.now() };
+
+      await manager.addPlayerToGameChannel(player, managed);
+
+      expect(mockMember.voice.setChannel).toHaveBeenCalledWith(mockChannel, expect.any(String));
+    });
   });
   describe("pruneEmptyChannels", () => {
     it("deve deletar canais vazios e antigos", async () => {

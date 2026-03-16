@@ -148,6 +148,22 @@ export const deletePlayersByDiscordId = (discordId: string): void => {
 };
 
 /**
+ * Atualiza a preferência de auto-join do jogador para todas as suas contas registradas.
+ */
+export const updateAutoJoinPreference = (discordId: string, enabled: boolean): void => {
+  const result = safeRun(() =>
+    db.update(players)
+      .set({ autoJoin: enabled })
+      .where(eq(players.discordId, discordId))
+      .run()
+  );
+
+  if (!result.success) {
+    throw new DatabaseError(result.error.message);
+  }
+};
+
+/**
  * Inativa jogadores sem atividade recente.
  */
 export const deactivateInactivePlayers = (days: number): Player[] => {

@@ -1,6 +1,6 @@
 import { mock, describe, expect, it, beforeEach, spyOn, afterAll } from "bun:test";
 import { RegisterPlayer } from "../src/use-cases/register-player.ts";
-import { GetPlayerStatus, UnregisterPlayer } from "../src/use-cases/player-status.ts";
+import { GetPlayerStatus, UnregisterPlayer, SetAutoJoinPreference } from "../src/use-cases/player-status.ts";
 import * as db from "../src/database/db.ts";
 import * as riot from "../src/services/riot.ts";
 import { ValidationError } from "../src/utils/errors.ts";
@@ -9,17 +9,20 @@ describe("Use Cases", () => {
   const upsertSpy = spyOn(db, "upsertPlayer");
   const getByDiscordSpy = spyOn(db, "getPlayersByDiscordId");
   const deleteSpy = spyOn(db, "deletePlayersByDiscordId");
+  const updateAutoJoinSpy = spyOn(db, "updateAutoJoinPreference");
   const getAccountSpy = spyOn(riot, "getAccountByRiotId");
 
   beforeEach(() => {
     upsertSpy.mockReset();
     getByDiscordSpy.mockReset();
     deleteSpy.mockReset();
+    updateAutoJoinSpy.mockReset();
     getAccountSpy.mockReset();
 
     upsertSpy.mockImplementation(() => {});
     getByDiscordSpy.mockReturnValue([]);
     deleteSpy.mockImplementation(() => {});
+    updateAutoJoinSpy.mockImplementation(() => {});
     getAccountSpy.mockResolvedValue(null);
   });
 
@@ -71,6 +74,12 @@ describe("Use Cases", () => {
       const useCase = new UnregisterPlayer();
       await useCase.execute("u1");
       expect(db.deletePlayersByDiscordId).toHaveBeenCalledWith("u1");
+    });
+
+    it("SetAutoJoinPreference deve chamar updateAutoJoinPreference no banco", async () => {
+      const useCase = new SetAutoJoinPreference();
+      await useCase.execute("u1", true);
+      expect(db.updateAutoJoinPreference).toHaveBeenCalledWith("u1", true);
     });
   });
 });

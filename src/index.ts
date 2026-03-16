@@ -3,6 +3,7 @@ import { config } from "dotenv";
 import { registerCommand } from "./commands/register.ts";
 import { statusCommand } from "./commands/status.ts";
 import { unregisterCommand } from "./commands/unregister.ts";
+import { autoJoinCommand } from "./commands/autojoin.ts";
 import { runMigrations } from "./database/db.ts";
 import { WatchdogEngine } from "./engine/watchdog.ts";
 import { loadEnv } from "./utils/env.ts";
@@ -29,12 +30,14 @@ const startApp = async () => {
     register: registerCommand,
     unregister: unregisterCommand,
     status: statusCommand,
+    autojoin: autoJoinCommand,
   };
 
   const commands = [
     registerCommand.data.toJSON(),
     unregisterCommand.data.toJSON(),
     statusCommand.data.toJSON(),
+    autoJoinCommand.data.toJSON(),
   ];
 
   const rest = new REST({ version: "10" }).setToken(env.DISCORD_TOKEN);
