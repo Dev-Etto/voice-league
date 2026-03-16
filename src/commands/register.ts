@@ -1,9 +1,11 @@
-import { SlashCommandBuilder, type ChatInputCommandInteraction } from "discord.js";
+import { SlashCommandBuilder, MessageFlags, type ChatInputCommandInteraction } from "discord.js";
 import { RegisterPlayer } from "../use-cases/register-player.ts";
 import { RateLimitError, ValidationError } from "../utils/errors.ts";
 import { safeAsync } from "../utils/safe-async.ts";
+import type { DiscordCommand } from "../types/command.ts";
+import type { WatchdogEngine } from "../engine/watchdog.ts";
 
-export const registerCommand = {
+export const registerCommand: DiscordCommand = {
   data: new SlashCommandBuilder()
     .setName("register")
     .setDescription("Vincula sua conta do LoL ao Discord")
@@ -13,17 +15,17 @@ export const registerCommand = {
         .setRequired(true)
     ),
 
-  async execute(interaction: ChatInputCommandInteraction) {
+  async execute(interaction: ChatInputCommandInteraction, _watchdog: WatchdogEngine) {
     const riotIdParam = interaction.options.getString("riotid", true);
 
     if (!riotIdParam.includes("#")) {
       return interaction.reply({
         content: "❌ Formato inválido. Use Nome#Tag (Ex: Faker#KR1).",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const registerUseCase = new RegisterPlayer();
     const result = await safeAsync(registerUseCase.execute(interaction.user.id, riotIdParam));

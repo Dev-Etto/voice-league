@@ -1,16 +1,17 @@
-import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder, type ChatInputCommandInteraction } from "discord.js";
+import { EmbedBuilder, MessageFlags, PermissionFlagsBits, SlashCommandBuilder, type ChatInputCommandInteraction } from "discord.js";
 import { getActivePlayers } from "../database/db.ts";
 import { WatchdogEngine } from "../engine/watchdog.ts";
 import { getEnv } from "../utils/env.ts";
+import type { DiscordCommand } from "../types/command.ts";
 
-export const auditCommand = {
+export const auditCommand: DiscordCommand = {
   data: new SlashCommandBuilder()
     .setName("audit")
     .setDescription(" [Admin Only] Mostra o estado interno do VoiceLeague")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction, watchdog: WatchdogEngine) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const players = getActivePlayers();
     const activeGames = watchdog.getTrackedGameCount();

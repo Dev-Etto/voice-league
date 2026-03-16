@@ -1,8 +1,10 @@
-import { SlashCommandBuilder, type ChatInputCommandInteraction } from "discord.js";
+import { SlashCommandBuilder, MessageFlags, type ChatInputCommandInteraction } from "discord.js";
 import { SetAutoJoinPreference } from "../use-cases/player-status.ts";
 import { safeAsync } from "../utils/safe-async.ts";
+import type { DiscordCommand } from "../types/command.ts";
+import type { WatchdogEngine } from "../engine/watchdog.ts";
 
-export const autoJoinCommand = {
+export const autoJoinCommand: DiscordCommand = {
   data: new SlashCommandBuilder()
     .setName("autojoin")
     .setDescription("Habilita ou desabilita a entrada automática na sala da partida")
@@ -12,9 +14,9 @@ export const autoJoinCommand = {
         .setRequired(true)
     ),
 
-  async execute(interaction: ChatInputCommandInteraction) {
+  async execute(interaction: ChatInputCommandInteraction, _watchdog: WatchdogEngine) {
     const enabled = interaction.options.getBoolean("enabled", true);
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const setAutoJoinUseCase = new SetAutoJoinPreference();
     const result = await safeAsync(setAutoJoinUseCase.execute(interaction.user.id, enabled));

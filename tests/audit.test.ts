@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { auditCommand } from "../src/commands/audit.ts";
+import { MessageFlags } from "discord.js";
 
 describe("Audit Command", () => {
   it("deve conter permissão de administrador no builder", () => {
@@ -20,7 +21,7 @@ describe("Audit Command", () => {
 
     await auditCommand.execute(mockInteraction, mockWatchdog);
 
-    expect(mockInteraction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(mockInteraction.deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral });
     expect(mockInteraction.editReply).toHaveBeenCalledWith(expect.objectContaining({
       embeds: expect.any(Array)
     }));

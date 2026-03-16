@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits, REST, Routes, type ChatInputCommandInteraction } from "discord.js";
+import { Client, Events, GatewayIntentBits, MessageFlags, REST, Routes, type ChatInputCommandInteraction } from "discord.js";
 import { config } from "dotenv";
 import { registerCommand } from "./commands/register.ts";
 import { statusCommand } from "./commands/status.ts";
@@ -10,6 +10,7 @@ import { loadEnv } from "./utils/env.ts";
 import { setupGlobalErrorHandlers } from "./utils/error-handler.ts";
 import { safeAsync } from "./utils/safe-async.ts";
 import { auditCommand } from "./commands/audit.ts";
+import type { DiscordCommand } from "./types/command.ts";
 
 config();
 
@@ -27,11 +28,12 @@ const startApp = async () => {
     ],
   });
 
-  const commandHandlers: Record<string, { execute: (i: ChatInputCommandInteraction) => Promise<unknown> }> = {
+  const commandHandlers: Record<string, DiscordCommand> = {
     register: registerCommand,
     unregister: unregisterCommand,
     status: statusCommand,
     autojoin: autoJoinCommand,
+    audit: auditCommand,
   };
 
   const commands = [
@@ -74,6 +76,28 @@ const startApp = async () => {
       }
     });
 
+    client.on(Events.InteractionCreate, async (interaction) => {
+      if (!interaction.isChatInputCommand()) return;
+
+      const handler = commandHandlers[interaction.commandName];
+      if (!handler) return;
+
+      const result = await safeAsync(handler.execute(interaction, watchdog));
+      
+      if (!result.success) {
+        console.error(`Erro no comando /${interaction.commandName}:`, result.error.message);
+
+        const errorContent = "❌ Ocorreu um erro inesperado.";
+        
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({ content: errorContent }).catch(() => {});
+        } else {
+          await interaction.reply({ content: errorContent, flags: MessageFlags.Ephemeral }).catch(() => {});
+        }
+      }
+    });
+
+
     const WEBHOOK_PORT = 3000;
     Bun.serve({
       port: WEBHOOK_PORT,
@@ -105,30 +129,6 @@ const startApp = async () => {
     console.log(`📡 Servidor de Webhooks ouvindo na porta ${WEBHOOK_PORT}`);
   });
 
-  client.on(Events.InteractionCreate, async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-
-    const handler = commandHandlers[interaction.commandName];
-    if (!handler) return;
-
-    const result = await safeAsync(handler.execute(interaction));
-    
-    if (!result.success) {
-      console.error(`Erro no comando /${interaction.commandName}:`, result.error.message);
-
-      const errorPayload = { 
-        content: "❌ Ocorreu um erro inesperado.", 
-        ephemeral: true 
-      };
-      
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply(errorPayload).catch(() => {});
-      } else {
-        await interaction.reply(errorPayload).catch(() => {});
-      }
-    }
-  });
-
   const loginResult = await safeAsync(client.login(env.DISCORD_TOKEN));
   if (!loginResult.success) {
     console.error("Falha ao iniciar o bot:", loginResult.error.message);
@@ -137,4 +137,5 @@ const startApp = async () => {
 };
 
 startApp();
+
 

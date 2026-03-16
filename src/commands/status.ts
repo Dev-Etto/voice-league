@@ -1,14 +1,16 @@
-import { SlashCommandBuilder, EmbedBuilder, type ChatInputCommandInteraction } from "discord.js";
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags, type ChatInputCommandInteraction } from "discord.js";
 import { GetPlayerStatus } from "../use-cases/player-status.ts";
 import { safeAsync } from "../utils/safe-async.ts";
+import type { DiscordCommand } from "../types/command.ts";
+import type { WatchdogEngine } from "../engine/watchdog.ts";
 
-export const statusCommand = {
+export const statusCommand: DiscordCommand = {
   data: new SlashCommandBuilder()
     .setName("status")
     .setDescription("Mostra suas contas vinculadas e status de monitoramento"),
 
-  async execute(interaction: ChatInputCommandInteraction) {
-    await interaction.deferReply({ ephemeral: true });
+  async execute(interaction: ChatInputCommandInteraction, _watchdog: WatchdogEngine) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const getStatusUseCase = new GetPlayerStatus();
     const result = await safeAsync(getStatusUseCase.execute(interaction.user.id));
