@@ -69,7 +69,7 @@ export const createMockMember = (id: string = "m1") => ({
 export const createMockVoiceChannel = (name: string, id: string) => ({
   id,
   name,
-  type: 2, // GuildVoice
+  type: 2,
   members: { size: 0 },
   createdTimestamp: Date.now(),
   delete: mock(() => Promise.resolve()),

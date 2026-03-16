@@ -1,6 +1,5 @@
 import { mock } from "bun:test";
 
-// Mocks individuais para reutilização
 export const DbMocks = {
   getActivePlayers: mock(() => []),
   updateLastGameId: mock(() => {}),
@@ -24,7 +23,6 @@ export const DataDragonMocks = {
   getChampionName: mock(() => Promise.resolve("Aatrox")),
 };
 
-// Registros globais no Bun
 mock.module("../src/database/db.ts", () => DbMocks);
 mock.module("../src/services/riot.ts", () => RiotMocks);
 mock.module("../src/services/data-dragon.ts", () => ({

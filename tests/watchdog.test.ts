@@ -7,7 +7,7 @@ import type { Player } from "../src/database/db.ts";
 import { WatchdogEngine } from "../src/engine/watchdog.ts";
 import { RateLimitError } from "../src/utils/errors.ts";
 import "./../.mocks/global.mock.ts";
-import { createMockClient, createMockInteraction } from "./../.mocks/discord.mock.ts";
+import { createMockClient } from "./../.mocks/discord.mock.ts";
 
 const createFakePlayer = (overrides: Partial<Player> = {}): Player => ({
   puuid: "p-123",
@@ -27,7 +27,6 @@ describe("WatchdogEngine", () => {
   let mockVoiceManager: any;
   const mockClient = createMockClient();
 
-  // Spies
   const getActivePlayersSpy = spyOn(db, "getActivePlayers");
   const updatePlayerActivitySpy = spyOn(db, "updatePlayerActivity");
   const updateLastGameIdSpy = spyOn(db, "updateLastGameId");
@@ -62,8 +61,8 @@ describe("WatchdogEngine", () => {
     getActiveGameSpy.mockResolvedValue(null);
     
     engine = new WatchdogEngine(mockClient, mockVoiceManager, 100);
-    // @ts-ignore
-    engine.sleep = mock(() => Promise.resolve());
+    
+    spyOn(engine as any, "delay").mockImplementation(() => Promise.resolve());
   });
 
   afterEach(() => {
@@ -80,16 +79,13 @@ describe("WatchdogEngine", () => {
   });
 
   it("deve gerenciar o ciclo de vida do polling corretamente", async () => {
-    // @ts-ignore
     const pollSpy = spyOn(engine, "poll").mockImplementation(() => Promise.resolve());
     
     await engine.start();
-    // @ts-ignore
-    expect(engine.intervalId).toBeDefined();
+    expect(engine.isMonitoring()).toBe(true);
     
     engine.stop();
-    // @ts-ignore
-    expect(engine.intervalId).toBeNull();
+    expect(engine.isMonitoring()).toBe(false);
     pollSpy.mockRestore();
   });
 
@@ -99,7 +95,6 @@ describe("WatchdogEngine", () => {
       getActivePlayersSpy.mockReturnValue([player]);
       getActiveGameSpy.mockResolvedValue(null);
 
-      // @ts-ignore
       await engine.poll();
 
       expect(db.updatePlayerActivity).toHaveBeenCalledWith("p1");
@@ -111,7 +106,6 @@ describe("WatchdogEngine", () => {
 
       const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
       
-      // @ts-ignore
       await engine.poll();
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining("Rate limit atingido"));
@@ -133,11 +127,9 @@ describe("WatchdogEngine", () => {
         ]
       } as any);
 
-      // @ts-ignore
-      const processSpy = spyOn(engine, "processPlayerInGame").mockImplementation(() => Promise.resolve());
+      const processSpy = spyOn(engine, "processMatchData").mockImplementation(() => Promise.resolve());
 
-      // @ts-ignore
-      await engine.checkPlayer(player, allPlayers);
+      await engine.checkPlayerMatch(player, allPlayers);
 
       expect(db.updateLastGameId).toHaveBeenCalledWith("p1", "777");
       expect(db.updateLastGameId).toHaveBeenCalledWith("ally-1", "777");
@@ -161,23 +153,21 @@ describe("WatchdogEngine", () => {
 
       mockVoiceManager.hasChannelForGame.mockReturnValue(true);
 
-      // @ts-ignore
-      engine.activeGames.set(999, {
+      engine._injectTrackedGame(999, {
         gameId: 999,
         teamPlayers: new Map([[100, [player1]]]),
         detectedAt: Date.now()
       });
 
-      // @ts-ignore
-      await engine.processPlayerInGame(game, player2);
+      await engine.processMatchData(game, player2);
 
       expect(mockVoiceManager.notifyPlayer).toHaveBeenCalledWith(player2, 999, 100, 20);
     });
 
     it("deve limpar jogos finalizados e agendar deleção de canais", async () => {
       const player = createFakePlayer({ puuid: "p1", lastGameId: "123" });
-      // @ts-ignore
-      engine.activeGames.set(123, {
+      
+      engine._injectTrackedGame(123, {
         gameId: 123,
         teamPlayers: new Map([[100, [player]]]),
         detectedAt: Date.now()
@@ -185,11 +175,9 @@ describe("WatchdogEngine", () => {
 
       getActivePlayersSpy.mockReturnValue([createFakePlayer({ puuid: "p1", lastGameId: null })]);
 
-      // @ts-ignore
       await engine.cleanupFinishedGames();
 
-      // @ts-ignore
-      expect(engine.activeGames.has(123)).toBe(false);
+      expect(engine.getTrackedGameCount()).toBe(0);
       expect(mockVoiceManager.scheduleChannelDeletion).toHaveBeenCalledWith(123, [player]);
     });
   });
@@ -199,7 +187,6 @@ describe("WatchdogEngine", () => {
       const inactivePlayer = createFakePlayer({ discordId: "d-id", gameName: "Afker" });
       deactivateInactivePlayersSpy.mockReturnValue([inactivePlayer]);
 
-      // @ts-ignore
       await engine.processInactivityCleanup();
 
       expect(db.deactivateInactivePlayers).toHaveBeenCalled();

@@ -1,6 +1,5 @@
 import { mock, describe, expect, it, beforeEach } from "bun:test";
 
-// Mocks do projeto no topo
 mock.module("../src/utils/env.ts", () => ({
   getEnv: () => ({ GUILD_ID: "g123" })
 }));
@@ -84,7 +83,6 @@ describe("VoiceChannelManager", () => {
       
       mockGuild.channels.fetch.mockResolvedValue(mockChannel);
       
-      // Forçar canal no mapa
       const mockChannelManaged = { gameId: 123, teamId: 100, channelId: "v123", inviteUrl: "", createdAt: Date.now() - 40000 };
       (manager as any).managedChannels.set("123-100", mockChannelManaged);
       
@@ -100,7 +98,6 @@ describe("VoiceChannelManager", () => {
       const blueChannel = createMockVoiceChannel("🔊 Time Azul - 1", "vBlue");
       const redChannel = createMockVoiceChannel("🔊 Time Vermelho - 1", "vRed");
       
-      // Registrar canais
       (manager as any).managedChannels.set("1-100", { channelId: "vBlue", teamId: 100, gameId: 1 });
       (manager as any).managedChannels.set("1-200", { channelId: "vRed", teamId: 200, gameId: 1 });
 
@@ -117,7 +114,6 @@ describe("VoiceChannelManager", () => {
 
       await manager.addPlayerToGameChannel(player, managed, 1);
 
-      // Deve dar permissão de Ver no canal Vermelho para o jogador Azul
       expect(redChannel.permissionOverwrites.create).toHaveBeenCalledWith("pBlue", expect.objectContaining({
         ViewChannel: true,
         Connect: false

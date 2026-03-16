@@ -51,7 +51,7 @@ describe("RiotService (Integration Coverage)", () => {
     httpSpy.mockResolvedValue({
       success: true,
       response: { status: 200 } as any,
-      data: { invalid: "data" } // Faltam campos do AccountSchema
+      data: { invalid: "data" }
     });
 
     expect(getAccountByRiotId("Faker", "KR1")).rejects.toThrow(/Schema inválido/);

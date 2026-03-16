@@ -9,7 +9,6 @@ describe("Utils Coverage", () => {
 
     afterEach(() => {
       process.env = { ...originalEnv };
-      // O cache do loadEnv é persistente por causa do 'let cachedEnv'
     });
 
     it("deve carregar variáveis corretamente", () => {

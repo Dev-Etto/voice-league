@@ -6,7 +6,6 @@ import * as riot from "../src/services/riot.ts";
 import { ValidationError } from "../src/utils/errors.ts";
 
 describe("Use Cases", () => {
-  // Spies criados fora para serem restaurados ou limpos
   const upsertSpy = spyOn(db, "upsertPlayer");
   const getByDiscordSpy = spyOn(db, "getPlayersByDiscordId");
   const deleteSpy = spyOn(db, "deletePlayersByDiscordId");

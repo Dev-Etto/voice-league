@@ -42,7 +42,6 @@ describe("Slash Commands", () => {
     mockUseCases.status.execute.mockClear();
     mockUseCases.unregister.execute.mockClear();
     
-    // Default behaviors
     mockUseCases.register.execute.mockResolvedValue({ gameName: "Faker", tagLine: "KR1" });
     mockUseCases.status.execute.mockResolvedValue([]);
   });
@@ -55,7 +54,7 @@ describe("Slash Commands", () => {
     });
 
     it("deve falhar se o formato do Riot ID for inválido", async () => {
-      const interaction = createMockInteraction({ riotid: "FakerKR1" }); // Sem #
+      const interaction = createMockInteraction({ riotid: "FakerKR1" });
       await registerCommand.execute(interaction);
       expect(interaction.reply).toHaveBeenCalledWith(expect.objectContaining({
         content: expect.stringContaining("Formato inválido")

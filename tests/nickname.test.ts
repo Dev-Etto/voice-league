@@ -7,7 +7,6 @@ describe("NicknameService", () => {
   let service: NicknameService;
   const getChampionSpy = spyOn(DataDragonService.prototype, "getChampionName");
   
-  // DB Spies
   const saveNickSpy = spyOn(db, "saveOriginalNickname");
   const getPlayerSpy = spyOn(db, "getPlayerByPuuid");
   const clearNickSpy = spyOn(db, "clearOriginalNickname");

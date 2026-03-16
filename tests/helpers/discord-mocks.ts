@@ -29,11 +29,10 @@ export const createMockGuild = () => {
     id: "g123",
     channels: {
       fetch: mock((id?: string) => {
-         if (id) return Promise.resolve(createMockVoiceChannel("Voice", id));
-         // Simula uma Collection do Discord.js que possui o método filter
-         const mockChannels = [] as any;
-         mockChannels.filter = (cb: any) => mockChannels.filter(cb); // Isso é recursivo e errado
-         return Promise.resolve([]); // Vamos retornar um array puro, que tem filter
+        if (id) return Promise.resolve(createMockVoiceChannel("Voice", id));
+        const mockChannels = [] as any;
+        mockChannels.filter = (cb: any) => mockChannels.filter(cb);
+        return Promise.resolve([]);
       }),
       create: mock(() => Promise.resolve(createMockVoiceChannel("Voice", "v1"))),
       cache: {
@@ -62,7 +61,7 @@ export const createMockMember = (id: string = "m1") => ({
 export const createMockVoiceChannel = (name: string, id: string) => ({
   id,
   name,
-  type: 2, // GuildVoice
+  type: 2,
   members: { size: 0 },
   createdTimestamp: Date.now(),
   delete: mock(() => Promise.resolve()),
