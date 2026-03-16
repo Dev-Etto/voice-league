@@ -79,6 +79,11 @@ const startApp = async () => {
         const url = new URL(req.url);
         
         if (req.method === "POST" && url.pathname === "/webhook/activity") {
+          const apiKey = req.headers.get("x-api-key");
+          if (apiKey !== env.WEBHOOK_API_KEY) {
+            return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
+          }
+
           const body = await req.json().catch(() => ({}));
           const { discordId } = body as { discordId?: string };
 

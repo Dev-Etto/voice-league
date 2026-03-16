@@ -78,7 +78,6 @@ async function request<T>(url: string, schema: z.ZodSchema<T>): Promise<T | null
 }
 
 const gameCache = new Map<string, { data: ActiveGame | null; timestamp: number }>();
-const CACHE_TTL_MS = 25000;
 
 export async function getAccountByRiotId(gameName: string, tagLine: string): Promise<RiotAccount | null> {
   const url = `${BASE_URL_ACCOUNT}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`;
@@ -88,8 +87,9 @@ export async function getAccountByRiotId(gameName: string, tagLine: string): Pro
 export async function getActiveGameByPuuid(puuid: string): Promise<ActiveGame | null> {
   const now = Date.now();
   const cached = gameCache.get(puuid);
+  const cacheTtl = getEnv().POLLING_INTERVAL_MS;
 
-  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+  if (cached && now - cached.timestamp < cacheTtl) {
     return cached.data;
   }
 

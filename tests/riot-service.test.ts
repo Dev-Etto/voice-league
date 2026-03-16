@@ -3,11 +3,15 @@ import { getAccountByRiotId, getActiveGameByPuuid, clearRiotCache } from "../src
 import { RateLimitError, RiotApiError } from "../src/utils/errors.ts";
 import * as httpClient from "../src/utils/http-client.ts";
 
+import * as env from "../src/utils/env.ts";
+
 describe("RiotService (Integration Coverage)", () => {
   const httpSpy = spyOn(httpClient, "httpClient");
+  const getEnvSpy = spyOn(env, "getEnv");
 
   beforeEach(() => {
     httpSpy.mockReset();
+    getEnvSpy.mockReturnValue({ POLLING_INTERVAL_MS: 30000 } as any);
     clearRiotCache();
   });
 

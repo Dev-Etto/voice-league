@@ -7,8 +7,9 @@ const EnvSchema = z.object({
   CLIENT_ID: z.string().min(1, "CLIENT_ID é obrigatório"),
   GUILD_ID: z.string().min(1, "GUILD_ID é obrigatório"),
   RIOT_API_KEY: z.string().min(1, "RIOT_API_KEY é obrigatório"),
-  POLLING_INTERVAL_MS: z.coerce.number().int().positive().default(30000),
+  POLLING_INTERVAL_MS: z.coerce.number().int().positive().default(15000),
   INACTIVITY_DAYS: z.coerce.number().int().positive().default(7),
+  WEBHOOK_API_KEY: z.string().min(1, "WEBHOOK_API_KEY é obrigatório"),
 });
 
 type Env = z.infer<typeof EnvSchema>;
