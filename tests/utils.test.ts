@@ -16,6 +16,7 @@ describe("Utils Coverage", () => {
       process.env.CLIENT_ID = "cli";
       process.env.GUILD_ID = "gui";
       process.env.RIOT_API_KEY = "rio";
+      process.env.WEBHOOK_API_KEY = "web";
       
       const env = loadEnv();
       expect(env.DISCORD_TOKEN).toBe("tok");

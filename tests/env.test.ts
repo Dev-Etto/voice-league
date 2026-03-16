@@ -9,7 +9,8 @@ describe("Env Validation", () => {
     process.env.CLIENT_ID = "test-client-id";
     process.env.GUILD_ID = "test-guild-id";
     process.env.RIOT_API_KEY = "test-riot-key";
-    process.env.POLLING_INTERVAL_MS = "30000";
+    process.env.POLLING_INTERVAL_MS = "15000";
+    process.env.WEBHOOK_API_KEY = "test-web-key";
   });
 
   afterEach(() => {
@@ -21,8 +22,9 @@ describe("Env Validation", () => {
     CLIENT_ID: z.string().min(1),
     GUILD_ID: z.string().min(1),
     RIOT_API_KEY: z.string().min(1),
-    POLLING_INTERVAL_MS: z.coerce.number().int().positive().default(30000),
+    POLLING_INTERVAL_MS: z.coerce.number().int().positive().default(15000),
     INACTIVITY_DAYS: z.coerce.number().int().positive().default(7),
+    WEBHOOK_API_KEY: z.string().min(1),
   });
 
   it("deve validar env completo com sucesso", () => {
@@ -48,7 +50,7 @@ describe("Env Validation", () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.POLLING_INTERVAL_MS).toBe(30000);
+      expect(result.data.POLLING_INTERVAL_MS).toBe(15000);
     }
   });
 
