@@ -78,7 +78,7 @@ async function request<T>(url: string, schema: z.ZodSchema<T>): Promise<T | null
 }
 
 const gameCache = new Map<string, { data: ActiveGame | null; timestamp: number }>();
-const CACHE_TTL_MS = 25000; // 25 segundos (um pouco menos que o poll padrão)
+const CACHE_TTL_MS = 25000;
 
 export async function getAccountByRiotId(gameName: string, tagLine: string): Promise<RiotAccount | null> {
   const url = `${BASE_URL_ACCOUNT}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`;

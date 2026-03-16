@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, type ChatInputCommandInteraction } from "discord.js";
 import { RegisterPlayer } from "../use-cases/register-player.ts";
 import { RateLimitError, ValidationError } from "../utils/errors.ts";
+import { safeAsync } from "../utils/safe-async.ts";
 
 export const registerCommand = {
   data: new SlashCommandBuilder()
@@ -24,12 +25,12 @@ export const registerCommand = {
 
     await interaction.deferReply({ ephemeral: true });
 
-    try {
-      const registerUseCase = new RegisterPlayer();
-      const result = await registerUseCase.execute(interaction.user.id, riotIdParam);
+    const registerUseCase = new RegisterPlayer();
+    const result = await safeAsync(registerUseCase.execute(interaction.user.id, riotIdParam));
 
-      return interaction.editReply(`✅ Conta **${result.gameName}#${result.tagLine}** vinculada com sucesso!`);
-    } catch (error) {
+    if (!result.success) {
+      const error = result.error;
+      
       if (error instanceof RateLimitError) {
         return interaction.editReply("⏳ A API da Riot está sobrecarregada. Tente novamente em alguns segundos.");
       }
@@ -41,6 +42,8 @@ export const registerCommand = {
       console.error("Erro no comando /register:", error);
       return interaction.editReply("❌ Ocorreu um erro interno ao tentar registrar sua conta.");
     }
+
+    const player = result.data;
+    return interaction.editReply(`✅ Conta **${player.gameName}#${player.tagLine}** vinculada com sucesso!`);
   }
 };
-

@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, type ChatInputCommandInteraction } from "discord.js";
 import { SetAutoJoinPreference } from "../use-cases/player-status.ts";
+import { safeAsync } from "../utils/safe-async.ts";
 
 export const autoJoinCommand = {
   data: new SlashCommandBuilder()
@@ -15,15 +16,15 @@ export const autoJoinCommand = {
     const enabled = interaction.options.getBoolean("enabled", true);
     await interaction.deferReply({ ephemeral: true });
 
-    try {
-      const setAutoJoinUseCase = new SetAutoJoinPreference();
-      await setAutoJoinUseCase.execute(interaction.user.id, enabled);
-      
-      const status = enabled ? "ativado" : "desativado";
-      return interaction.editReply(`✅ Auto-join **${status}** com sucesso.`);
-    } catch (error) {
-      console.error("Erro no comando /autojoin:", error);
+    const setAutoJoinUseCase = new SetAutoJoinPreference();
+    const result = await safeAsync(setAutoJoinUseCase.execute(interaction.user.id, enabled));
+    
+    if (!result.success) {
+      console.error("Erro no comando /autojoin:", result.error);
       return interaction.editReply("❌ Ocorreu um erro ao atualizar sua preferência.");
     }
+
+    const status = enabled ? "ativado" : "desativado";
+    return interaction.editReply(`✅ Auto-join **${status}** com sucesso.`);
   }
 };

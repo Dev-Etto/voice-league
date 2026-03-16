@@ -1,6 +1,7 @@
 import type { Client, Guild, GuildMember } from "discord.js";
 import { 
   getActivePlayers, 
+  getPlayersByDiscordId,
   updateLastGameId, 
   updatePlayerActivity, 
   deactivateInactivePlayers, 
@@ -70,6 +71,26 @@ export class WatchdogEngine {
   }
 
   /**
+   * Dispara uma verificação imediata para um usuário específico (ex: via Webhook ou Evento).
+   */
+  public async triggerImmediateCheck(discordId: string): Promise<void> {
+    const guildId = getEnv().GUILD_ID;
+    const guildResult = await safeAsync(this.voiceManager.client.guilds.fetch(guildId));
+    
+    if (!guildResult.success) return;
+    const guild = guildResult.data;
+
+    const playersFromDb = getPlayersByDiscordId(discordId);
+    if (playersFromDb.length === 0) return;
+
+    const allPlayers = getActivePlayers();
+    
+    for (const player of playersFromDb) {
+      await this.processPlayerPoll(player, guild, allPlayers);
+    }
+  }
+
+  /**
    * Executa uma rodada de verificação de todos os jogadores ativos.
    */
   public async poll(): Promise<void> {
@@ -80,33 +101,28 @@ export class WatchdogEngine {
     this.isPolling = true;
     this.checkedPuuids.clear();
 
-    try {
-      const guildId = getEnv().GUILD_ID;
-      const guildResult = await safeAsync<Guild>(this.voiceManager.client.guilds.fetch(guildId));
-      
-      if (!guildResult.success) {
-        console.error("❌ Erro ao buscar guild:", guildResult.error.message);
-        return;
-      }
-
-      const playersList = getActivePlayers();
-      const guild = guildResult.data;
-
-      for (const player of playersList) {
-        await this.processPlayerPoll(player, guild, playersList);
-      }
-
-      await this.cleanupFinishedGames();
-      
-      const activeGameIds = new Set(this.activeGames.keys());
-      await this.voiceManager.pruneEmptyChannels(activeGameIds);
-      await this.processInactivityCleanup();
-
-    } catch (error) {
-      console.error("❌ Erro inesperado no ciclo de poll:", error instanceof Error ? error.message : error);
-    } finally {
-      this.isPolling = false;
+    const guildId = getEnv().GUILD_ID;
+    const guildResult = await safeAsync<Guild>(this.voiceManager.client.guilds.fetch(guildId));
+    
+    if (!guildResult.success) {
+      console.error("❌ Erro ao buscar guild:", guildResult.error.message);
+      return;
     }
+
+    const playersList = getActivePlayers();
+    const guild = guildResult.data;
+
+    for (const player of playersList) {
+      await this.processPlayerPoll(player, guild, playersList);
+    }
+
+    await this.cleanupFinishedGames();
+    
+    const activeGameIds = new Set(this.activeGames.keys());
+    await this.voiceManager.pruneEmptyChannels(activeGameIds);
+    await this.processInactivityCleanup();
+
+    this.isPolling = false;
   }
 
   private async processPlayerPoll(player: Player, guild: Guild, allPlayers: Player[]): Promise<void> {
@@ -114,7 +130,6 @@ export class WatchdogEngine {
       return;
     }
 
-    // Tenta pegar o membro do cache primeiro para evitar chamadas de rede desnecessárias
     let member = guild.members.cache.get(player.discordId);
     
     if (!member) {
@@ -132,15 +147,10 @@ export class WatchdogEngine {
 
     const isOnline = presence?.status === "online" || presence?.status === "dnd";
 
-    // Se estiver online ou jogando, atualizamos a atividade no banco para evitar inativação
     if (isPlayingLoL || isOnline) {
       updatePlayerActivity(player.puuid);
     }
 
-    // OBTURADOR DE POLLING: 
-    // Só consultamos a Riot se:
-    // 1. O Discord diz que ele está jogando LoL.
-    // 2. Ele já estava em uma partida no poll anterior (para detectar quando acaba).
     if (!isPlayingLoL && !player.lastGameId) {
       return;
     }
@@ -151,8 +161,6 @@ export class WatchdogEngine {
       this.handlePollError(checkResult.error, player);
     }
 
-    // Delay adaptativo: se for cache, não precisa de delay. Se for rede, respeitamos o limite.
-    // Por enquanto mantemos o delay fixo mas reduzido para melhorar fluidez.
     await this.delay(800);
   }
 
@@ -175,8 +183,14 @@ export class WatchdogEngine {
    * Verifica se o jogador está em uma partida ativa e atualiza os aliados detectados.
    */
   public async checkPlayerMatch(player: Player, allPlayers: Player[]): Promise<void> {
-    const game = await getActiveGameByPuuid(player.puuid);
+    const result = await safeAsync(getActiveGameByPuuid(player.puuid));
     this.checkedPuuids.add(player.puuid);
+
+    if (!result.success) {
+      throw result.error;
+    }
+
+    const game = result.data;
 
     if (!game) {
       if (player.lastGameId) {

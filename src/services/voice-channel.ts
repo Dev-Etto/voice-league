@@ -158,7 +158,6 @@ export class VoiceChannelManager {
 
     await this.notificationService.sendGameInvite(player, TEAM_LABELS[managed.teamId], managed.gameId, managed.inviteUrl);
     
-    // Lógica de Auto-Join
     if (player.autoJoin && member.voice.channelId && member.voice.channelId !== channel.id) {
       await safeAsync(member.voice.setChannel(channel, "Auto-Join VoiceLeague"));
     }

@@ -208,4 +208,20 @@ describe("WatchdogEngine", () => {
       expect(mockClient.users.fetch).toHaveBeenCalledWith("d-id");
     });
   });
+
+  describe("Individual Check Logic", () => {
+    it("deve disparar verificação imediata para um discordId específico", async () => {
+      const mockPlayer = createFakePlayer({ discordId: "d1", puuid: "p1", gameName: "Player1" });
+      const dbSpy = spyOn(db, "getPlayersByDiscordId").mockReturnValue([mockPlayer]);
+      
+      const processSpy = spyOn(engine as any, "processPlayerPoll").mockResolvedValue(undefined);
+
+      await engine.triggerImmediateCheck("d1");
+
+      expect(dbSpy).toHaveBeenCalledWith("d1");
+      expect(processSpy).toHaveBeenCalled();
+      
+      dbSpy.mockRestore();
+    });
+  });
 });

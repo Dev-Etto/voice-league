@@ -90,13 +90,11 @@ describe("RiotService (Integration Coverage)", () => {
       response: { status: 200, headers: new Map() } as any,
     });
 
-    // Primeira chamada - deve ir para o network
     const first = await getActiveGameByPuuid("p-cache");
-    // Segunda chamada - deve vir do cache
     const second = await getActiveGameByPuuid("p-cache");
 
     expect(first?.gameId).toBe(999);
     expect(second?.gameId).toBe(999);
-    expect(httpSpy).toHaveBeenCalledTimes(1); // Somente 1 chamada de rede
+    expect(httpSpy).toHaveBeenCalledTimes(1);
   });
 });

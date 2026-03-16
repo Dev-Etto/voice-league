@@ -51,7 +51,7 @@ export const createMockGuild = () => {
     members: {
       fetch: mock((id: string) => Promise.resolve(createMockMember(id))),
       cache: {
-        get: mock((id: string) => null), // Por padrão retorna null para forçar o fetch nos testes se n configurado
+        get: mock((id: string) => null),
       }
     },
   } as any;

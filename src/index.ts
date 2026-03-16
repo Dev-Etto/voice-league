@@ -59,6 +59,43 @@ const startApp = async () => {
 
     const watchdog = new WatchdogEngine(readyClient);
     await watchdog.start();
+
+    client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+      if (newState.member && newState.channelId && newState.channelId !== oldState.channelId) {
+        void watchdog.triggerImmediateCheck(newState.member.id);
+      }
+    });
+
+    client.on(Events.PresenceUpdate, (oldPresence, newPresence) => {
+      if (newPresence.member && newPresence.activities.some(a => a.name.toLowerCase().includes("league of legends"))) {
+        void watchdog.triggerImmediateCheck(newPresence.member.id);
+      }
+    });
+
+    const WEBHOOK_PORT = 3000;
+    Bun.serve({
+      port: WEBHOOK_PORT,
+      async fetch(req) {
+        const url = new URL(req.url);
+        
+        if (req.method === "POST" && url.pathname === "/webhook/activity") {
+          const body = await req.json().catch(() => ({}));
+          const { discordId } = body as { discordId?: string };
+
+          if (discordId) {
+            console.log(`📡 Webhook recebido para usuário Discord: ${discordId}`);
+            void watchdog.triggerImmediateCheck(discordId);
+            return Response.json({ success: true, message: "Check triggered" });
+          }
+          
+          return Response.json({ success: false, error: "Missing discordId" }, { status: 400 });
+        }
+
+        return new Response("VoiceLeague Bot Webhook Server", { status: 404 });
+      },
+    });
+
+    console.log(`📡 Servidor de Webhooks ouvindo na porta ${WEBHOOK_PORT}`);
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
