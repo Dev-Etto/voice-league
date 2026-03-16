@@ -11,6 +11,8 @@
 
 O **VoiceLeague** é um bot de Discord engenheirado para automatizar a comunicação de times de League of Legends. Ele detecta quando um jogador registrado entra em partida, cria instantaneamente um canal de voz temporário e gerencia o ciclo de vida deste canal até o fim do jogo.
 
+🌍 **[Visite a Landing Page Oficial](https://github.com/Dev-Etto/voice-league-web)**
+
 </div>
 
 ---
@@ -47,26 +49,31 @@ O projeto segue princípios de **Clean Architecture** e **SOLID**, organizados n
 Para que o bot funcione corretamente, você deve configurar as seguintes permissões e intents no [Discord Developer Portal](https://discord.com/developers/applications):
 
 #### 1. Privileged Gateway Intents
+
 Acesse a aba **Bot** e ative as seguintes opções:
+
 - **Presence Intent**: Necessária para detectar quando o usuário entra no cliente do League of Legends.
 - **Server Members Intent**: Necessária para gerenciar cargos e permissões.
 - **Guild Presences**: Fundamental para o funcionamento do motor de Watchdog.
 
 #### 2. Permissões do Bot (OAuth2 URL Generator)
+
 Ao gerar o link de convite, selecione o scope `bot` e `applications.commands`. As permissões mínimas necessárias são:
+
 - **General Permissions**: `Manage Channels` (criar/deletar salas), `View Channels`.
 - **Text Permissions**: `Send Messages`, `Embed Links`, `Read Message History`.
 - **Voice Permissions**: `Connect`, `Speak`, `Move Members` (para o Auto-Join).
 
 #### 3. Hierarquia de Cargos
+
 Certifique-se de que o cargo do bot esteja **acima** dos usuários que ele deve mover entre canais de voz, caso contrário, o Discord bloqueará a ação.
 
 ---
 
 ### Pré-requisitos de API
 
-1.  **Bun** instalado (v1.0+ recomendado).
-2.  **Riot Developer Portal**: Obtenha uma `RIOT_TOKEN` (API Key).
+1. **Bun** instalado (v1.0+ recomendado).
+2. **Riot Developer Portal**: Obtenha uma `RIOT_TOKEN` (API Key).
 
 ### Instalação
 
@@ -93,7 +100,7 @@ bun run dev
 ## 📜 Interface de Comandos (Slash Commands)
 
 | Comando | Parâmetros | Descrição |
-|---|---|---|
+| :--- | :--- | :--- |
 | `/register` | `riotid` | Vincula sua conta (Ex: `Faker#KR1`) ao seu ID do Discord. |
 | `/autojoin` | `enabled` | Liga/Desliga a entrada automática no canal de voz ao iniciar partida. |
 | `/status` | - | Mostra suas contas vinculadas e o estado atual do monitoramento. |
@@ -126,7 +133,7 @@ Este projeto prioriza a qualidade técnica e segue rigorosamente:
 ## 📦 Scripts Disponíveis
 
 | Script | Comando | Descrição |
-|---|---|---|
+| :--- | :--- | :--- |
 | `dev` | `bun run --watch src/index.ts` | Modo live-reload para desenvolvimento. |
 | `start` | `bun run src/index.ts` | Execução em produção. |
 | `test` | `bun test` | Executa a suíte completa de testes unitários e integração. |
@@ -145,6 +152,6 @@ Este projeto prioriza a qualidade técnica e segue rigorosamente:
 
 ---
 
-<div align="center">
+<p align="center">
 Desenvolvido por <a href="https://github.com/Dev-Etto">Dev-Etto</a>
-</div>
+</p>
