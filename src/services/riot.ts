@@ -77,14 +77,34 @@ async function request<T>(url: string, schema: z.ZodSchema<T>): Promise<T | null
   return parseResult.data;
 }
 
+const gameCache = new Map<string, { data: ActiveGame | null; timestamp: number }>();
+const CACHE_TTL_MS = 25000; // 25 segundos (um pouco menos que o poll padrão)
+
 export async function getAccountByRiotId(gameName: string, tagLine: string): Promise<RiotAccount | null> {
   const url = `${BASE_URL_ACCOUNT}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`;
   return request(url, AccountSchema);
 }
 
 export async function getActiveGameByPuuid(puuid: string): Promise<ActiveGame | null> {
+  const now = Date.now();
+  const cached = gameCache.get(puuid);
+
+  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   const url = `${BASE_URL_SPECTATOR}/lol/spectator/v5/active-games/by-summoner/${puuid}`;
-  return request(url, SpectatorSchema);
+  const data = await request(url, SpectatorSchema);
+
+  gameCache.set(puuid, { data, timestamp: now });
+  return data;
+}
+
+/**
+ * Limpa o cache de partidas (útil para testes).
+ */
+export function clearRiotCache(): void {
+  gameCache.clear();
 }
 
 

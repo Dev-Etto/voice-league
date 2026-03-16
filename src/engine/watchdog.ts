@@ -114,22 +114,33 @@ export class WatchdogEngine {
       return;
     }
 
-    const memberResult = await safeAsync<GuildMember>(guild.members.fetch(player.discordId));
-    if (!memberResult.success) {
-      return;
+    // Tenta pegar o membro do cache primeiro para evitar chamadas de rede desnecessárias
+    let member = guild.members.cache.get(player.discordId);
+    
+    if (!member) {
+      const memberResult = await safeAsync<GuildMember>(guild.members.fetch(player.discordId));
+      if (!memberResult.success) {
+        return;
+      }
+      member = memberResult.data;
     }
 
-    const member = memberResult.data;
-    const isPlayingLoL = member.presence?.activities.some(
+    const presence = member.presence;
+    const isPlayingLoL = presence?.activities.some(
       activity => activity.name.toLowerCase().includes("league of legends")
     );
 
-    const isOnline = member.presence?.status === "online" || member.presence?.status === "dnd";
+    const isOnline = presence?.status === "online" || presence?.status === "dnd";
 
+    // Se estiver online ou jogando, atualizamos a atividade no banco para evitar inativação
     if (isPlayingLoL || isOnline) {
       updatePlayerActivity(player.puuid);
     }
 
+    // OBTURADOR DE POLLING: 
+    // Só consultamos a Riot se:
+    // 1. O Discord diz que ele está jogando LoL.
+    // 2. Ele já estava em uma partida no poll anterior (para detectar quando acaba).
     if (!isPlayingLoL && !player.lastGameId) {
       return;
     }
@@ -140,7 +151,9 @@ export class WatchdogEngine {
       this.handlePollError(checkResult.error, player);
     }
 
-    await this.delay(1200);
+    // Delay adaptativo: se for cache, não precisa de delay. Se for rede, respeitamos o limite.
+    // Por enquanto mantemos o delay fixo mas reduzido para melhorar fluidez.
+    await this.delay(800);
   }
 
   private handlePollError(error: Error, player: Player): void {

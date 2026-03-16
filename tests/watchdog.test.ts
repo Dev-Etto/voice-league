@@ -19,6 +19,7 @@ const createFakePlayer = (overrides: Partial<Player> = {}): Player => ({
   createdAt: new Date().toISOString(),
   lastSeenAt: new Date().toISOString(),
   originalNickname: null,
+  autoJoin: false,
   ...overrides
 });
 
@@ -95,14 +96,28 @@ describe("WatchdogEngine", () => {
       getActivePlayersSpy.mockReturnValue([player]);
       getActiveGameSpy.mockResolvedValue(null);
 
+      const mockGuild = await mockClient.guilds.fetch("g1");
+      const mockMember = {
+        presence: {
+          status: "online",
+          activities: [{ name: "League of Legends" }]
+        }
+      };
+      (mockGuild.members.cache.get as any).mockReturnValue(mockMember);
+
       await engine.poll();
 
       expect(db.updatePlayerActivity).toHaveBeenCalledWith("p1");
     });
 
     it("deve lidar com RateLimitError durante o poll", async () => {
-      getActivePlayersSpy.mockReturnValue([createFakePlayer({ lastGameId: "playing" })]);
+      const player = createFakePlayer({ lastGameId: "playing" });
+      getActivePlayersSpy.mockReturnValue([player]);
       getActiveGameSpy.mockRejectedValue(new RateLimitError(5));
+
+      const mockGuild = await mockClient.guilds.fetch("g1");
+      const mockMember = { presence: { status: "online", activities: [{ name: "League of Legends" }] } };
+      (mockGuild.members.cache.get as any).mockReturnValue(mockMember);
 
       const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
       

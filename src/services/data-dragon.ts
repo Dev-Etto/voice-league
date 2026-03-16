@@ -28,6 +28,10 @@ export class DataDragonService {
     return DataDragonService.instance;
   }
 
+  public static _resetInstance(): void {
+    (DataDragonService as any).instance = undefined;
+  }
+
   /**
    * Retorna o nome do campeão pelo ID.
    */

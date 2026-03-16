@@ -1,13 +1,14 @@
-import { describe, expect, it, spyOn, afterAll } from "bun:test";
-import { getAccountByRiotId, getActiveGameByPuuid } from "../src/services/riot.ts";
+import { describe, expect, it, beforeEach, spyOn } from "bun:test";
+import { getAccountByRiotId, getActiveGameByPuuid, clearRiotCache } from "../src/services/riot.ts";
 import { RateLimitError, RiotApiError } from "../src/utils/errors.ts";
-import * as httpClientModule from "../src/utils/http-client.ts";
+import * as httpClient from "../src/utils/http-client.ts";
 
 describe("RiotService (Integration Coverage)", () => {
-  const httpSpy = spyOn(httpClientModule, "httpClient");
+  const httpSpy = spyOn(httpClient, "httpClient");
 
-  afterAll(() => {
-    httpSpy.mockRestore();
+  beforeEach(() => {
+    httpSpy.mockReset();
+    clearRiotCache();
   });
 
   it("deve lidar com 404 (jogador não encontrado)", async () => {
@@ -73,5 +74,29 @@ describe("RiotService (Integration Coverage)", () => {
 
     const result = await getActiveGameByPuuid("p1");
     expect(result?.gameId).toBe(123);
+  });
+
+  it("deve retornar dados do cache na segunda chamada", async () => {
+    httpSpy.mockResolvedValue({
+      success: true,
+      data: {
+        gameId: 999,
+        gameStartTime: Date.now(),
+        platformId: "BR1",
+        gameMode: "CLASSIC",
+        gameType: "MATCHED_GAME",
+        participants: [],
+      },
+      response: { status: 200, headers: new Map() } as any,
+    });
+
+    // Primeira chamada - deve ir para o network
+    const first = await getActiveGameByPuuid("p-cache");
+    // Segunda chamada - deve vir do cache
+    const second = await getActiveGameByPuuid("p-cache");
+
+    expect(first?.gameId).toBe(999);
+    expect(second?.gameId).toBe(999);
+    expect(httpSpy).toHaveBeenCalledTimes(1); // Somente 1 chamada de rede
   });
 });
