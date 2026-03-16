@@ -19,24 +19,24 @@ O **VoiceLeague** é um bot de Discord engenheirado para automatizar a comunica�
 
 O projeto utiliza o estado da arte do ecossistema TypeScript moderno para garantir performance e baixa latência:
 
-- **Runtime**: [Bun](https://bun.sh) para execução ultra-rápida e gerenciamento de dependências.
+- **Runtime**: [Bun](https://bun.sh) para execução ultra-rápida, servidor HTTP e gerenciamento de dependências.
 - **Linguagem**: TypeScript (Strict Mode) para máxima segurança de tipos.
-- **Interface**: [Discord.js](https://discord.js.org/) para interação com a API do Discord.
-- **ORM & Banco**: [Drizzle ORM](https://orm.drizzle.team/) com [SQLite](https://www.sqlite.org/) para persistência leve e eficiente.
-- **Validação**: [Zod](https://zod.dev/) para validação de esquemas e variáveis de ambiente.
-- **Integração**: Riot Games API (Active Games V5).
+- **Interface**: [Discord.js (v14+)](https://discord.js.org/) para interação com a API do Discord.
+- **ORM & Banco**: [Drizzle ORM](https://orm.drizzle.team/) com [SQLite (Bun:SQLite)](https://bun.sh/docs/api/sqlite) para persistência leve.
+- **Validação**: [Zod](https://zod.dev/) para esquemas de dados e variáveis de ambiente.
+- **Integração**: Riot Games API (Active Games V5 & Account V1).
 
 ---
 
 ## 🏗️ Arquitetura
 
-O projeto segue princípios de **Clean Architecture** e **SOLID**, garantindo manutenibilidade e escalabilidade:
+O projeto segue princípios de **Clean Architecture** e **SOLID**, organizados nas seguintes camadas:
 
-- **Service Layer**: Abstrai as integrações externas (Riot API e Discord Voice Manager).
-- **Engine (Watchdog)**: O núcleo do sistema que processa a lógica de monitoramento em tempo real.
-- **Command Pattern**: Implementação desacoplada dos comandos slash do Discord.
-- **Repository Pattern (via Drizzle)**: Camada de persistência isolada das regras de negócio.
-- **Otimização de Polling**: Sistema de filtragem em 3 camadas (Subscription -> Presence -> Riot Query) para minimizar chamadas desnecessárias à API.
+- **Use Cases (Domain Logic)**: Centraliza as regras de negócio, como registro de jogadores e gerenciamento de preferências.
+- **Engine (Watchdog)**: O núcleo reativo que processa o monitoramento. Combina **Polling Adaptativo** com **Eventos Reativos** (Presence & Voice Updates).
+- **Service Layer**: Abstrai integrações externas (Riot API, Voice Manager, Notification Service).
+- **Webhooks Server**: Servidor HTTP interno via `Bun.serve` para notificações externas de atividade.
+- **Padrão de Segurança**: Uso sistemático de wrappers `safeAsync` e `safeRun` para tratamento de erros sem aninhamentos de try/catch.
 
 ---
 
@@ -44,12 +44,12 @@ O projeto segue princípios de **Clean Architecture** e **SOLID**, garantindo ma
 
 ### Pré-requisitos
 
-1. **Bun** instalado em sua máquina.
-2. **Discord Developer Portal**:
-   - Ative **PRESENCE INTENT** e **GUILD_VOICE_STATES**.
-   - Crie um bot e obtenha o `DISCORD_TOKEN` e `CLIENT_ID`.
-3. **Riot Developer Portal**:
-   - Obtenha uma `RIOT_TOKEN` (API Key).
+1.  **Bun** instalado (v1.0+ recomendado).
+2.  **Discord Developer Portal**:
+    - Ative **PRESENCE INTENT** e **GUILD_VOICE_STATES**.
+    - Configure as permissões de `Manage Channels` e `Move Members`.
+3.  **Riot Developer Portal**:
+    - Obtenha uma `RIOT_TOKEN` (API Key).
 
 ### Instalação
 
@@ -62,9 +62,9 @@ bun install
 
 # Configure as variáveis de ambiente
 cp .env.example .env
-# Preencha o .env com suas chaves
+# Edite o .env com suas chaves (RIOT_TOKEN, DISCORD_TOKEN, etc.)
 
-# Prepare o banco de dados
+# Prepare o banco de dados (Migrations)
 bun run db:push
 
 # Inicie em modo de desenvolvimento
@@ -73,13 +73,24 @@ bun run dev
 
 ---
 
-## 📜 Documentação de Comandos (Interface)
+## 📜 Interface de Comandos (Slash Commands)
 
 | Comando | Parâmetros | Descrição |
 |---|---|---|
-| `/register` | `name`, `tag` | Registra sua conta do LoL (ex: `Faker#KR1`) para monitoramento automático. |
-| `/status` | - | Verifica o status atual do seu registro e se há uma partida sendo monitorada. |
-| `/unregister` | - | Remove seu registro e interrompe o monitoramento automático. |
+| `/register` | `riotid` | Vincula sua conta (Ex: `Faker#KR1`) ao seu ID do Discord. |
+| `/autojoin` | `enabled` | Liga/Desliga a entrada automática no canal de voz ao iniciar partida. |
+| `/status` | - | Mostra suas contas vinculadas e o estado atual do monitoramento. |
+| `/unregister` | - | Remove todos os seus dados e interrompe o monitoramento. |
+
+---
+
+## 🔗 Webhooks (API Interna)
+
+O bot expõe um servidor de webhooks na porta `3000` para integrações imediatas:
+
+- **Endpoint**: `POST /webhook/activity`
+- **Payload**: `{ "discordId": "string" }`
+- **Ação**: Dispara um `triggerImmediateCheck` no motor de monitoramento para o usuário informado, ignorando o intervalo de polling.
 
 ---
 
@@ -87,11 +98,11 @@ bun run dev
 
 Este projeto prioriza a qualidade técnica e segue rigorosamente:
 
-- **Clean Code & SOLID**: Código modular, legível e de responsabilidade única.
-- **TypeScript Estrito**: Tipagem detalhada sem o uso de `any`.
-- **Early Return**: Lógica limpa evitando aninhamentos desnecessários (if/else).
-- **Tratamento de Erros Robusto**: Middlewares e wrappers globais para capturar exceções silenciosas.
-- **Imutabilidade**: Uso preferencial de métodos funcionais (`map`, `filter`, `reduce`).
+- **Clean Code & SOLID**: Código modular e de responsabilidade única.
+- **TypeScript Estrito**: Proibido o uso de `any`.
+- **Early Return**: Lógica limpa evitando aninhamentos desnecessários.
+- **Tratamento de Erros**: Uso do padrão Result com o utilitário `safeAsync`.
+- **Mobile-First Docs**: Documentação e logs otimizados para leitura rápida.
 
 ---
 
@@ -99,20 +110,21 @@ Este projeto prioriza a qualidade técnica e segue rigorosamente:
 
 | Script | Comando | Descrição |
 |---|---|---|
-| `dev` | `bun --watch src/index.ts` | Inicia o bot em modo live-reload (Desenvolvimento). |
-| `start` | `bun src/index.ts` | Inicia o bot em modo de produção. |
-| `test` | `bun test` | Executa a suíte de testes unitários com Bun Test. |
-| `db:push` | `drizzle-kit push` | Sincroniza o schema do Drizzle com o SQLite local. |
-| `db:studio` | `drizzle-kit studio` | Abre o painel visual para gerenciar o banco de dados. |
+| `dev` | `bun run --watch src/index.ts` | Modo live-reload para desenvolvimento. |
+| `start` | `bun run src/index.ts` | Execução em produção. |
+| `test` | `bun test` | Executa a suíte completa de testes unitários e integração. |
+| `db:push` | `bun x drizzle-kit push` | Sincroniza o banco local com o schema do Drizzle. |
+| `db:studio` | `bun x drizzle-kit studio` | Interface visual para o banco de dados SQLite. |
 
 ---
 
 ## 🤝 Como Contribuir
 
 1. Faça um **Fork** do projeto.
-2. Crie uma **Branch** para sua funcionalidade (`git checkout -b feature/nova-feature`).
-3. Siga os padrões de escrita e **Commits Semânticos**.
-4. Abra um **Pull Request** detalhando suas alterações.
+2. Crie uma **Branch** (`git checkout -b feature/minha-feature`).
+3. Siga o padrão de **Commits Semânticos** (`feat:`, `fix:`, `docs:`).
+4. Certifique-se de que os testes passam (`bun test`).
+5. Abra um **Pull Request**.
 
 ---
 
