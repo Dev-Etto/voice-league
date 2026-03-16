@@ -9,6 +9,7 @@ import { WatchdogEngine } from "./engine/watchdog.ts";
 import { loadEnv } from "./utils/env.ts";
 import { setupGlobalErrorHandlers } from "./utils/error-handler.ts";
 import { safeAsync } from "./utils/safe-async.ts";
+import { auditCommand } from "./commands/audit.ts";
 
 config();
 
@@ -38,6 +39,7 @@ const startApp = async () => {
     unregisterCommand.data.toJSON(),
     statusCommand.data.toJSON(),
     autoJoinCommand.data.toJSON(),
+    auditCommand.data.toJSON()
   ];
 
   const rest = new REST({ version: "10" }).setToken(env.DISCORD_TOKEN);

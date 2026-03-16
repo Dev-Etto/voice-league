@@ -42,14 +42,31 @@ O projeto segue princípios de **Clean Architecture** e **SOLID**, organizados n
 
 ## 🛠️ Pré-requisitos e Instalação
 
-### Pré-requisitos
+### Configuração do Discord (Portal do Desenvolvedor)
+
+Para que o bot funcione corretamente, você deve configurar as seguintes permissões e intents no [Discord Developer Portal](https://discord.com/developers/applications):
+
+#### 1. Privileged Gateway Intents
+Acesse a aba **Bot** e ative as seguintes opções:
+- **Presence Intent**: Necessária para detectar quando o usuário entra no cliente do League of Legends.
+- **Server Members Intent**: Necessária para gerenciar cargos e permissões.
+- **Guild Presences**: Fundamental para o funcionamento do motor de Watchdog.
+
+#### 2. Permissões do Bot (OAuth2 URL Generator)
+Ao gerar o link de convite, selecione o scope `bot` e `applications.commands`. As permissões mínimas necessárias são:
+- **General Permissions**: `Manage Channels` (criar/deletar salas), `View Channels`.
+- **Text Permissions**: `Send Messages`, `Embed Links`, `Read Message History`.
+- **Voice Permissions**: `Connect`, `Speak`, `Move Members` (para o Auto-Join).
+
+#### 3. Hierarquia de Cargos
+Certifique-se de que o cargo do bot esteja **acima** dos usuários que ele deve mover entre canais de voz, caso contrário, o Discord bloqueará a ação.
+
+---
+
+### Pré-requisitos de API
 
 1.  **Bun** instalado (v1.0+ recomendado).
-2.  **Discord Developer Portal**:
-    - Ative **PRESENCE INTENT** e **GUILD_VOICE_STATES**.
-    - Configure as permissões de `Manage Channels` e `Move Members`.
-3.  **Riot Developer Portal**:
-    - Obtenha uma `RIOT_TOKEN` (API Key).
+2.  **Riot Developer Portal**: Obtenha uma `RIOT_TOKEN` (API Key).
 
 ### Instalação
 
